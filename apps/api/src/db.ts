@@ -59,20 +59,32 @@ export const db = {
     }
     return [...memory.knowledge.values()]
   },
+  updateKnowledgePack: async (kpId: UUID, values: Partial<{ title: string; content: string }>): Promise<KnowledgePack | undefined> => {
+    if (supabase) {
+      const { data, error } = await supabase.from('knowledge_packs').update(values as any).eq('id', kpId).select().single()
+      if (error) return undefined
+      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime() }
+    }
+    const existing = memory.knowledge.get(kpId)
+    if (!existing) return undefined
+    const updated: KnowledgePack = { ...existing, ...values }
+    memory.knowledge.set(kpId, updated)
+    return updated
+  },
   createAgent: async (name: string, knowledgePackId: UUID, ownerAccountId?: string, specialization?: string): Promise<Agent> => {
     if (supabase) {
-      const { data, error } = await supabase.from('agents').insert({ name, knowledge_pack_id: knowledgePackId, rating: 1000, owner_account_id: ownerAccountId || null, specialization: specialization || null }).select().single()
-      if (!error) return { id: data.id, name: data.name, knowledgePackId: data.knowledge_pack_id, rating: data.rating, ownerAccountId: data.owner_account_id || undefined, specialization: data.specialization || undefined, createdAt: new Date(data.created_at).getTime() }
+      const { data, error } = await supabase.from('agents').insert({ name, knowledge_pack_id: knowledgePackId, owner_account_id: ownerAccountId || null, specialization: specialization || null }).select().single()
+      if (!error) return { id: data.id, name: data.name, knowledgePackId: data.knowledge_pack_id, ownerAccountId: data.owner_account_id || undefined, specialization: data.specialization || undefined, createdAt: new Date(data.created_at).getTime() }
       const msg = (error as any)?.message || ''
       if (msg.includes('column') && (msg.includes('owner_account_id') || msg.includes('specialization')) && msg.includes('does not exist')) {
-        const r = await supabase.from('agents').insert({ name, knowledge_pack_id: knowledgePackId, rating: 1000 }).select().single()
+        const r = await supabase.from('agents').insert({ name, knowledge_pack_id: knowledgePackId }).select().single()
         if (r.error) throw r.error
         const d = r.data
-        return { id: d.id, name: d.name, knowledgePackId: d.knowledge_pack_id, rating: d.rating, ownerAccountId: undefined, specialization: undefined, createdAt: new Date(d.created_at).getTime() }
+        return { id: d.id, name: d.name, knowledgePackId: d.knowledge_pack_id, ownerAccountId: undefined, specialization: undefined, createdAt: new Date(d.created_at).getTime() }
       }
       throw error
     }
-    const ag: Agent = { id: id(), name, knowledgePackId, rating: 1000, ownerAccountId, specialization, createdAt: Date.now() }
+    const ag: Agent = { id: id(), name, knowledgePackId, ownerAccountId, specialization, createdAt: Date.now() }
     memory.agents.set(ag.id, ag)
     return ag
   },
@@ -80,28 +92,32 @@ export const db = {
     if (supabase) {
       const { data, error } = await supabase.from('agents').select('*').eq('id', agentId).single()
       if (error) return undefined
-      return { id: data.id, name: data.name, knowledgePackId: data.knowledge_pack_id, rating: data.rating, ownerAccountId: data.owner_account_id || undefined, specialization: data.specialization || undefined, createdAt: new Date(data.created_at).getTime() }
+      return { id: data.id, name: data.name, knowledgePackId: data.knowledge_pack_id, ownerAccountId: data.owner_account_id || undefined, specialization: data.specialization || undefined, createdAt: new Date(data.created_at).getTime() }
     }
     return memory.agents.get(agentId)
   },
   listAgents: async (): Promise<Agent[]> => {
     if (supabase) {
-      const { data, error } = await supabase.from('agents').select('*').order('rating', { ascending: false })
+      const { data, error } = await supabase.from('agents').select('*').order('created_at', { ascending: false })
       if (error) throw error
-      return data.map((d: any) => ({ id: d.id, name: d.name, knowledgePackId: d.knowledge_pack_id, rating: d.rating, ownerAccountId: d.owner_account_id || undefined, specialization: d.specialization || undefined, createdAt: new Date(d.created_at).getTime() }))
+      return data.map((d: any) => ({ id: d.id, name: d.name, knowledgePackId: d.knowledge_pack_id, ownerAccountId: d.owner_account_id || undefined, specialization: d.specialization || undefined, createdAt: new Date(d.created_at).getTime() }))
     }
     return [...memory.agents.values()]
   },
-  updateAgentRating: async (agentId: UUID, rating: number): Promise<void> => {
+  updateAgent: async (agentId: UUID, values: Partial<{ name: string; specialization?: string }>): Promise<Agent | undefined> => {
     if (supabase) {
-      await supabase.from('agents').update({ rating }).eq('id', agentId)
-      return
+      const payload: any = {}
+      if (typeof values.name === 'string') payload.name = values.name
+      if (typeof values.specialization === 'string') payload.specialization = values.specialization
+      const { data, error } = await supabase.from('agents').update(payload).eq('id', agentId).select().single()
+      if (error) return undefined
+      return { id: data.id, name: data.name, knowledgePackId: data.knowledge_pack_id, ownerAccountId: data.owner_account_id || undefined, specialization: data.specialization || undefined, createdAt: new Date(data.created_at).getTime() }
     }
-    const ag = memory.agents.get(agentId)
-    if (ag) {
-      ag.rating = rating
-      memory.agents.set(agentId, ag)
-    }
+    const existing = memory.agents.get(agentId)
+    if (!existing) return undefined
+    const updated: Agent = { ...existing, ...values }
+    memory.agents.set(agentId, updated)
+    return updated
   },
   createMatch: async (m: Omit<Match, 'id' | 'createdAt'>): Promise<Match> => {
     if (supabase) {
@@ -111,7 +127,8 @@ export const db = {
         agent_b_id: m.agentBId,
         rounds: m.rounds,
         judge_scores: m.judgeScores,
-        winner_agent_id: m.winnerAgentId || null
+        winner_agent_id: m.winnerAgentId || null,
+        judge_conclusion: m.judgeConclusion || null
       }
       const { data, error } = await supabase.from('matches').insert(payload).select().single()
       if (error) throw error
@@ -123,6 +140,7 @@ export const db = {
         rounds: data.rounds,
         judgeScores: data.judge_scores,
         winnerAgentId: data.winner_agent_id || undefined,
+        judgeConclusion: data.judge_conclusion || undefined,
         createdAt: new Date(data.created_at).getTime()
       }
     }
@@ -142,6 +160,7 @@ export const db = {
         rounds: data.rounds,
         judgeScores: data.judge_scores,
         winnerAgentId: data.winner_agent_id || undefined,
+        judgeConclusion: data.judge_conclusion || undefined,
         createdAt: new Date(data.created_at).getTime()
       }
     }
@@ -159,6 +178,7 @@ export const db = {
         rounds: d.rounds,
         judgeScores: d.judge_scores,
         winnerAgentId: d.winner_agent_id || undefined,
+        judgeConclusion: d.judge_conclusion || undefined,
         createdAt: new Date(d.created_at).getTime()
       }))
     }
@@ -175,7 +195,8 @@ export const db = {
         agent_b_id: updated.agentBId,
         rounds: updated.rounds,
         judge_scores: updated.judgeScores,
-        winner_agent_id: updated.winnerAgentId || null
+        winner_agent_id: updated.winnerAgentId || null,
+        judge_conclusion: updated.judgeConclusion || null
       }
       await supabase.from('matches').update(payload).eq('id', matchId)
       return updated
@@ -186,16 +207,39 @@ export const db = {
     memory.matches.set(matchId, u)
     return u
   }
-  , createArena: async (arena: { code: string; topic: string; creatorAccountId: string }): Promise<any> => {
+  , deleteAgent: async (agentId: UUID): Promise<boolean> => {
+    if (supabase) {
+      const { error } = await supabase.from('agents').delete().eq('id', agentId)
+      if (error) throw error
+      return true
+    }
+    const existed = memory.agents.has(agentId)
+    memory.agents.delete(agentId)
+    return existed
+  }
+  , deleteKnowledgePack: async (kpId: UUID): Promise<boolean> => {
+    if (supabase) {
+      const { error } = await supabase.from('knowledge_packs').delete().eq('id', kpId)
+      if (error) throw error
+      return true
+    }
+    const existed = memory.knowledge.has(kpId)
+    memory.knowledge.delete(kpId)
+    return existed
+  }
+  , createArena: async (arena: { code: string; topic: string; creatorAccountId: string; gameType?: 'import'|'challenge'; challengeMinutes?: number }): Promise<any> => {
     if (supabase) {
       let attempts = 0
       while (attempts < 5) {
         const code = attempts === 0 ? arena.code : Math.random().toString(36).slice(2, 8).toUpperCase()
-        const { data, error } = await supabase.from('arenas').insert({ code, topic: arena.topic, creator_account_id: arena.creatorAccountId }).select().single()
+        const payload: any = { code, topic: arena.topic, creator_account_id: arena.creatorAccountId }
+        if (arena.gameType) payload.game_type = arena.gameType
+        if (arena.challengeMinutes) payload.challenge_minutes = arena.challengeMinutes
+        const { data, error } = await supabase.from('arenas').insert(payload).select().single()
         if (!error) return data
         const msg = (error as any)?.message || ''
         if (msg.includes('relation') && msg.includes('does not exist')) {
-          const a = { id: id(), code, topic: arena.topic, status: 'waiting', creator_account_id: arena.creatorAccountId, created_at: new Date().toISOString() }
+          const a = { id: id(), code, topic: arena.topic, status: 'waiting', creator_account_id: arena.creatorAccountId, created_at: new Date().toISOString(), game_type: arena.gameType || 'import', challenge_minutes: arena.challengeMinutes }
           memory.arenas.set(a.code, a)
           return a
         }
@@ -207,7 +251,7 @@ export const db = {
       }
       throw new Error('Failed to generate unique arena code after retries')
     }
-    const a = { id: id(), code: arena.code, topic: arena.topic, status: 'waiting', creator_account_id: arena.creatorAccountId, created_at: new Date().toISOString() }
+    const a = { id: id(), code: arena.code, topic: arena.topic, status: 'waiting', creator_account_id: arena.creatorAccountId, created_at: new Date().toISOString(), game_type: arena.gameType || 'import', challenge_minutes: arena.challengeMinutes }
     ;(memory as any).arenas = (memory as any).arenas || new Map<string, any>()
     ;(memory as any).arenas.set(a.code, a)
     return a
@@ -243,6 +287,84 @@ export const db = {
     const u = { ...a, ...values }
     memory.arenas.set(code, u)
     return u
+  }
+  , getArenaById: async (arenaId: string): Promise<any | undefined> => {
+    if (supabase) {
+      const { data, error } = await supabase.from('arenas').select('*').eq('id', arenaId).single()
+      if (error) return undefined
+      return data
+    }
+    const byId = [...memory.arenas.values()].find((a: any) => a.id === arenaId)
+    return byId
+  }
+  , updateArenaById: async (arenaId: string, values: any): Promise<any | undefined> => {
+    if (supabase) {
+      const { data, error } = await supabase.from('arenas').update(values).eq('id', arenaId).select().single()
+      if (error) return undefined
+      return data
+    }
+    const a = [...memory.arenas.values()].find((x: any) => x.id === arenaId)
+    if (!a) return undefined
+    const u = { ...a, ...values }
+    memory.arenas.set(u.code || arenaId, u)
+    return u
+  }
+  , listArenas: async (accountId?: string): Promise<any[]> => {
+    if (supabase) {
+      if (accountId) {
+        const { data, error } = await supabase
+          .from('arenas')
+          .select('*')
+          .or(`creator_account_id.eq.${accountId},joiner_account_id.eq.${accountId}`)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        return data
+      } else {
+        const { data, error } = await supabase.from('arenas').select('*').order('created_at', { ascending: false })
+        if (error) throw error
+        return data
+      }
+    }
+    const arr = [...memory.arenas.values()]
+    return accountId ? arr.filter(a => a.creator_account_id === accountId || a.joiner_account_id === accountId) : arr
+  }
+  , deleteArenaById: async (arenaId: string): Promise<boolean> => {
+    if (supabase) {
+      const { error } = await supabase.from('arenas').delete().eq('id', arenaId)
+      if (error) throw error
+      return true
+    }
+    const found = [...memory.arenas.values()].find((a: any) => a.id === arenaId)
+    if (!found) return false
+    memory.arenas.delete(found.code)
+    return true
+  }
+  , getUserByAccountId: async (accountId: string): Promise<any | undefined> => {
+    if (supabase) {
+      const { data } = await supabase.from('users').select('*').eq('account_id', accountId).maybeSingle()
+      if (!data) return undefined
+      return data
+    }
+    return undefined
+  }
+  , updateUserElo: async (accountId: string, rating: number): Promise<void> => {
+    if (supabase) {
+      await supabase.from('users').update({ elo_rating: rating }).eq('account_id', accountId)
+      return
+    }
+  }
+  , listLeaderboardAccounts: async (): Promise<{ accountId: string; name?: string; elo: number; agentCount: number }[]> => {
+    if (supabase) {
+      const { data: users } = await supabase.from('users').select('account_id,name,elo_rating')
+      const { data: agents } = await supabase.from('agents').select('owner_account_id')
+      const countsMap = new Map<string, number>()
+      for (const row of (agents || [])) {
+        const owner = row.owner_account_id
+        if (owner) countsMap.set(owner, (countsMap.get(owner) || 0) + 1)
+      }
+      return (users || []).map((u: any) => ({ accountId: u.account_id, name: u.name, elo: u.elo_rating || 1000, agentCount: countsMap.get(u.account_id) || 0 }))
+    }
+    return []
   }
 }
 

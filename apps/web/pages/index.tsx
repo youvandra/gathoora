@@ -116,7 +116,7 @@ export default function Home() {
               <div className="text-sm text-gray-700">Wallet: {accountId}</div>
               <button className="px-3 py-1 text-sm border" onClick={handleDisconnect}>Disconnect</button>
               <div className="space-x-4">
-                <Link href="/upload" className="px-4 py-2 bg-blue-600 text-white rounded">Upload Knowledge</Link>
+                <Link href="/packs" className="px-4 py-2 bg-blue-600 text-white rounded">Packs</Link>
                 <Link href="/arena" className="px-4 py-2 bg-green-600 text-white rounded">Arena</Link>
                 <Link href="/leaderboard" className="px-4 py-2 bg-gray-700 text-white rounded">Leaderboard</Link>
               </div>

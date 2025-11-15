@@ -53,7 +53,7 @@ export default function Upload() {
           setCreatedAgent(ag)
         }}>Create Agent</button>
         {createdAgent && (
-          <div className="p-3 border">Agent created: {createdAgent.name} ({createdAgent.rating}) {createdAgent.specialization ? `- ${createdAgent.specialization}` : ''}</div>
+          <div className="p-3 border">Agent created: {createdAgent.name} {createdAgent.specialization ? `- ${createdAgent.specialization}` : ''}</div>
         )}
       </div>
       <div>

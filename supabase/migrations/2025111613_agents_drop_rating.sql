@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS agents_rating_idx;
+ALTER TABLE agents DROP COLUMN IF EXISTS rating;

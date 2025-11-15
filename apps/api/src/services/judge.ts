@@ -23,3 +23,10 @@ export async function aggregateJudgeScores(scores: JudgeScore[]) {
   const b = scores.reduce((s, v) => s + v.agentBScore, 0) / scores.length
   return { a, b }
 }
+
+export async function judgeConclusion(topic: string, aText: string, bText: string, avgA: number, avgB: number) {
+  const system = 'You are a strict debate judge. Provide a concise, neutral conclusion summarizing the decision.'
+  const prompt = `Topic: ${topic}\nAverage Scores -> A: ${avgA.toFixed(2)}, B: ${avgB.toFixed(2)}\nGive 1-2 sentences explaining which side prevailed and why, based only on arguments quality.`
+  const out = await generateText(system, prompt)
+  return (out || '').trim()
+}

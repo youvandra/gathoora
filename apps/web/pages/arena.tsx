@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { listAgents, listMatches, createArena, getArena, joinArena, selectArenaAgent, startArena, setArenaReady } from '../lib/api'
+import { listAgents, listMatches, createArena, getArenaById, joinArenaByCode, startArena, setArenaReady, listArenas, deleteArena } from '../lib/api'
 
 export default function Arena() {
   const [agents, setAgents] = useState<any[]>([])
   const [topic, setTopic] = useState('')
-  const [myAgent, setMyAgent] = useState('')
+  const [gameType, setGameType] = useState<'import'|'challenge'>('import')
+  const [challengeMinutes, setChallengeMinutes] = useState(5)
   const [mode, setMode] = useState<'create'|'join'>('create')
-  const [code, setCode] = useState('')
-  const [inputCode, setInputCode] = useState('')
+  const [createdId, setCreatedId] = useState('')
+  const [inputId, setInputId] = useState('')
   const [arena, setArena] = useState<any | null>(null)
   const [match, setMatch] = useState<any | null>(null)
   const [recent, setRecent] = useState<any[]>([])
+  const [myArenas, setMyArenas] = useState<any[]>([])
   const pollingRef = useRef<any>(null)
+  const accId = typeof window !== 'undefined' ? (localStorage.getItem('accountId') || '') : ''
 
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? localStorage.getItem('accountId') : null
@@ -21,6 +24,7 @@ export default function Arena() {
     }
     listAgents().then(setAgents)
     listMatches().then(setRecent)
+    listArenas(acc).then(setMyArenas)
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
   }, [])
 
@@ -35,21 +39,25 @@ export default function Arena() {
         {mode === 'create' ? (
           <div className="space-y-2">
             <input className="w-full border p-2" placeholder="Topic" value={topic} onChange={e => setTopic(e.target.value)} />
-            <select className="w-full border p-2" value={myAgent} onChange={e => setMyAgent(e.target.value)}>
-              <option value="">Select Your Agent (A)</option>
-              {agents.map(x => <option key={x.id} value={x.id}>{x.name} ({x.rating})</option>)}
-            </select>
+            <div className="flex gap-2">
+              <select className="border p-2" value={gameType} onChange={e => setGameType(e.target.value as any)}>
+                <option value="import">Import agents</option>
+                <option value="challenge">Challenge (write knowledge)</option>
+              </select>
+              {gameType === 'challenge' && (
+                <input type="number" min={1} max={60} className="border p-2 w-32" value={challengeMinutes} onChange={e => setChallengeMinutes(Number(e.target.value))} placeholder="Minutes" />
+              )}
+            </div>
             <button className="px-4 py-2 bg-purple-600 text-white" onClick={async () => {
               const acc = localStorage.getItem('accountId') || ''
-              if (!acc || !topic || !myAgent) return
+              if (!acc || !topic) return
               try {
-                const a = await createArena(topic, acc)
+                const a = await createArena(topic, acc, gameType, gameType === 'challenge' ? challengeMinutes : undefined)
                 setArena(a)
-                setCode(a.code)
-                await selectArenaAgent(a.code, 'a', myAgent)
-                if (typeof window !== 'undefined') window.location.href = `/arena/${a.code}`
+                setCreatedId(a.id)
+                if (typeof window !== 'undefined') window.location.href = `/arena/${a.id}`
                 pollingRef.current = setInterval(async () => {
-                  const curr = await getArena(a.code)
+                  const curr = await getArenaById(a.id)
                   setArena(curr)
                   if (curr.match_id) {
                     clearInterval(pollingRef.current)
@@ -59,35 +67,30 @@ export default function Arena() {
                 alert(e?.message || 'Failed to create arena')
               }
             }}>Create Arena</button>
-            {code && <div className="border p-2">Arena Code: <span className="font-mono">{code}</span></div>}
+            {createdId && <div className="border p-2">Arena ID: <span className="font-mono">{createdId}</span></div>}
             {arena && (
               <div className="space-y-2 border p-2">
                 <div>Status: {arena.status}</div>
-                <div>Ready: Creator {arena.creator_ready ? '✅' : '❌'} | Joiner {arena.joiner_ready ? '✅' : '❌'}</div>
+                <div>Ready: You {arena.creator_ready ? '✅' : '❌'} | Opponent {arena.joiner_ready ? '✅' : '❌'}</div>
                 <div className="flex gap-2">
-                  <button className="px-3 py-1 border" onClick={async ()=>{ if (!arena) return; await setArenaReady(arena.code, 'creator', true); const curr = await getArena(arena.code); setArena(curr) }}>Ready</button>
-                  <button className="px-3 py-1 border" disabled={!(arena.agent_a_id && arena.agent_b_id && arena.creator_ready && arena.joiner_ready && !arena.match_id)} onClick={async ()=>{ const res = await startArena(arena.code); setMatch(res.match); const curr = await getArena(arena.code); setArena(curr) }}>Start Debate</button>
+                  <button className="px-3 py-1 border" onClick={async ()=>{ if (!arena) return; await setArenaReady(arena.id, 'creator', true); const curr = await getArenaById(arena.id); setArena(curr) }}>Ready</button>
+                  <button className="px-3 py-1 border" disabled={!(arena.agent_a_id && arena.agent_b_id && arena.creator_ready && arena.joiner_ready && !arena.match_id)} onClick={async ()=>{ const res = await startArena(arena.id); setMatch(res.match); const curr = await getArenaById(arena.id); setArena(curr) }}>Start Debate</button>
                 </div>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-2">
-            <input className="w-full border p-2" placeholder="Arena Code" value={inputCode} onChange={e => setInputCode(e.target.value.toUpperCase())} />
-            <select className="w-full border p-2" value={myAgent} onChange={e => setMyAgent(e.target.value)}>
-              <option value="">Select Your Agent (B)</option>
-              {agents.map(x => <option key={x.id} value={x.id}>{x.name} ({x.rating})</option>)}
-            </select>
+            <input className="w-full border p-2" placeholder="Arena Code" value={inputId} onChange={e => setInputId(e.target.value.toUpperCase())} />
             <button className="px-4 py-2 bg-green-600 text-white" onClick={async () => {
               const acc = localStorage.getItem('accountId') || ''
-              const code = inputCode.trim().toUpperCase()
-              if (!acc || !code || !myAgent) return
+              const code = inputId.trim().toUpperCase()
+              if (!acc || !code) return
               try {
-                await joinArena(code, acc)
-                await selectArenaAgent(code, 'b', myAgent)
-                if (typeof window !== 'undefined') window.location.href = `/arena/${code}`
+                const joined = await joinArenaByCode(code, acc)
+                if (typeof window !== 'undefined') window.location.href = `/arena/${joined.id}`
                 pollingRef.current = setInterval(async () => {
-                  const curr = await getArena(code)
+                  const curr = await getArenaById(joined.id)
                   setArena(curr)
                   if (curr.match_id) {
                     clearInterval(pollingRef.current)
@@ -100,14 +103,36 @@ export default function Arena() {
             {arena && (
               <div className="space-y-2 border p-2">
                 <div>Status: {arena.status}</div>
-                <div>Ready: Creator {arena.creator_ready ? '✅' : '❌'} | Joiner {arena.joiner_ready ? '✅' : '❌'}</div>
+                <div>Ready: Opponent {arena.creator_ready ? '✅' : '❌'} | You {arena.joiner_ready ? '✅' : '❌'}</div>
                 <div className="flex gap-2">
-                  <button className="px-3 py-1 border" onClick={async ()=>{ if (!arena) return; await setArenaReady(arena.code, 'joiner', true); const curr = await getArena(arena.code); setArena(curr) }}>Ready</button>
+                  <button className="px-3 py-1 border" onClick={async ()=>{ if (!arena) return; await setArenaReady(arena.id, 'joiner', true); const curr = await getArenaById(arena.id); setArena(curr) }}>Ready</button>
                 </div>
               </div>
             )}
           </div>
         )}
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-xl font-semibold">My Arena</h3>
+        <div className="grid grid-cols-1 gap-2">
+          {myArenas.map((a: any) => (
+            <div key={a.id} className="border p-2 flex items-center justify-between">
+              <a href={`/arena/${a.id}`} className="block">
+                <div>ID: <span className="font-mono">{a.id}</span></div>
+                <div>Code: <span className="font-mono">{a.code || '-'}</span></div>
+                <div>Topic: {a.topic}</div>
+                <div className="text-sm">Ready: {(a.creator_account_id === accId ? 'You' : 'Opponent')} {a.creator_ready ? '✅' : '❌'} | {(a.joiner_account_id === accId ? 'You' : 'Opponent')} {a.joiner_ready ? '✅' : '❌'}</div>
+              </a>
+              {a.creator_account_id === accId && a.status !== 'completed' && (
+                <button className="ml-4 px-3 py-1 border" onClick={async () => {
+                  await deleteArena(a.id, accId)
+                  const updated = await listArenas(accId)
+                  setMyArenas(updated)
+                }}>Delete</button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
       {match && (
         <div className="space-y-3">

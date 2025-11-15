@@ -11,7 +11,6 @@ export type Agent = {
   id: UUID
   name: string
   knowledgePackId: UUID
-  rating: number
   ownerAccountId?: string
   specialization?: string
   createdAt: number
@@ -33,6 +32,7 @@ export type Match = {
   rounds: RoundEntry[]
   judgeScores: JudgeScore[]
   winnerAgentId?: UUID
+  judgeConclusion?: string
   createdAt: number
 }
 
