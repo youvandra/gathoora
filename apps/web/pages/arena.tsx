@@ -17,6 +17,8 @@ export default function Arena() {
   const [recent, setRecent] = useState<any[]>([])
   const [myArenas, setMyArenas] = useState<any[]>([])
   const [watchArenas, setWatchArenas] = useState<any[]>([])
+  const [myLimit, setMyLimit] = useState<number>(3)
+  const [watchLimit, setWatchLimit] = useState<number>(3)
   const pollingRef = useRef<any>(null)
   const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
 
@@ -52,7 +54,7 @@ export default function Arena() {
       <div className="space-y-2">
         <h3 className="text-xl font-semibold">My Arena</h3>
         <div className="grid grid-cols-1 gap-3">
-          {myArenas.map((a: any) => {
+          {myArenas.slice(0, myLimit).map((a: any) => {
             const statusText = String(a.status||'').toLowerCase()
             const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
             const isCreator = a.creator_account_id === accId
@@ -66,34 +68,23 @@ export default function Arena() {
                       <div className="text-sm text-brand-brown/60">Code <span className="font-mono">{a.code || '-'}</span></div>
                       <div className="text-lg font-semibold" title={a.topic}>{titleText}</div>
                     </a>
-                    {statusText === 'waiting' && (
-                      <div className="space-y-1">
-                        <div className="text-xs text-brand-brown/60">Players</div>
-                        <div className="flex items-center gap-2">
-                          <span className="badge bg-white border text-brand-brown/80">
-                            <span className={`inline-block w-2 h-2 rounded-full mr-2 ${a.creator_ready ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                            {(isCreator ? 'You' : 'Opponent')} {a.creator_ready ? 'Ready' : 'Not Ready'}
-                          </span>
-                          <span className="badge bg-white border text-brand-brown/80">
-                            <span className={`inline-block w-2 h-2 rounded-full mr-2 ${a.joiner_ready ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                            {(isJoiner ? 'You' : 'Opponent')} {a.joiner_ready ? 'Ready' : 'Not Ready'}
-                          </span>
-                        </div>
-                      </div>
-                    )}
                     <div className="flex items-center gap-2">
                       <span className="badge bg-white border text-brand-brown/80">{a.game_type === 'challenge' ? 'Challenge' : 'Import'}</span>
                       <span className={`badge ${statusColor}`}>{a.status}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex items-center gap-2">
                     <a className="btn-outline" href={`/arena/${a.id}`}>Open</a>
                     {isCreator && a.status !== 'completed' && (
-                      <button className="btn-outline" onClick={async () => {
+                      <button aria-label="Delete Arena" className="btn-outline text-red-600 border-red-600 hover:bg-red-50 h-10" onClick={async () => {
                         await deleteArena(a.id, accId)
                         const updated = await listArenas(accId)
                         setMyArenas(updated)
-                      }}>Delete</button>
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M9 6V4h6v2m1 2-1 12a2 2 0 01-2 2H8a2 2 0 01-2-2L5 8m4 4v6m6-6v6" />
+                        </svg>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -101,14 +92,20 @@ export default function Arena() {
             )
           })}
         </div>
+        {myArenas.length > myLimit && (
+          <div className="flex justify-center mt-2">
+            <button className="btn-outline" onClick={()=> setMyLimit(l => Math.min(l+3, myArenas.length))}>Load More</button>
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         <h3 className="text-xl font-semibold">(Watch-only) Arena</h3>
         {watchArenas.length === 0 ? (
           <div className="text-sm text-brand-brown/60">Belum ada arena yang kamu tonton.</div>
         ) : (
+          <>
           <div className="grid grid-cols-1 gap-3">
-            {(Array.isArray(watchArenas) ? watchArenas : []).map((a: any) => {
+            {(Array.isArray(watchArenas) ? watchArenas : []).slice(0, watchLimit).map((a: any) => {
               const statusText = String(a.status||'').toLowerCase()
               const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
               const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
@@ -133,6 +130,12 @@ export default function Arena() {
               )
             })}
           </div>
+          {((Array.isArray(watchArenas) ? watchArenas.length : 0) > watchLimit) && (
+            <div className="flex justify-center mt-2">
+              <button className="btn-outline" onClick={()=> setWatchLimit(l => Math.min(l+3, (Array.isArray(watchArenas) ? watchArenas.length : 0)))}>Load More</button>
+            </div>
+          )}
+          </>
         )}
       </div>
       {match && (
