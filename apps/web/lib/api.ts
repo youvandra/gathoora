@@ -25,7 +25,11 @@ export async function updateKnowledgePack(id: string, values: { title?: string; 
 
 export async function deleteKnowledgePack(id: string) {
   const r = await fetch(`${API_URL}/knowledge-packs/${id}`, { method: 'DELETE' })
-  return r.json()
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || (data && (data.error || data.ok === false))) {
+    throw new Error((data && data.error) || 'Delete failed')
+  }
+  return data
 }
 
 export async function listAgents() {
@@ -53,6 +57,29 @@ export async function updateAgent(id: string, values: { name?: string; specializ
 
 export async function deleteAgent(id: string) {
   const r = await fetch(`${API_URL}/agents/${id}`, { method: 'DELETE' })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || (data && (data.error || data.ok === false))) {
+    throw new Error((data && data.error) || 'Delete failed')
+  }
+  return data
+}
+
+export async function listAgentKnowledgePacks(agentId: string) {
+  const r = await fetch(`${API_URL}/agents/${agentId}/knowledge-packs`)
+  return r.json()
+}
+
+export async function addAgentKnowledge(agentId: string, knowledgePackId: string) {
+  const r = await fetch(`${API_URL}/agents/${agentId}/knowledge-packs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ knowledgePackId })
+  })
+  return r.json()
+}
+
+export async function removeAgentKnowledge(agentId: string, knowledgePackId: string) {
+  const r = await fetch(`${API_URL}/agents/${agentId}/knowledge-packs/${knowledgePackId}`, { method: 'DELETE' })
   return r.json()
 }
 
@@ -170,6 +197,15 @@ export async function saveArenaDraft(id: string, accountId: string, agentName?: 
   } catch {
     return { ok: r.ok, status: r.status }
   }
+}
+
+export async function cancelArena(id: string) {
+  const r = await fetch(`${API_URL}/arenas/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  })
+  return r.json()
 }
 
 export async function deleteArena(id: string, accountId: string) {

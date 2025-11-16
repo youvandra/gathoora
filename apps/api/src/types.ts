@@ -10,7 +10,7 @@ export type KnowledgePack = {
 export type Agent = {
   id: UUID
   name: string
-  knowledgePackId: UUID
+  knowledgePackIds: UUID[]
   ownerAccountId?: string
   specialization?: string
   createdAt: number

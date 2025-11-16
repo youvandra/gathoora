@@ -48,7 +48,7 @@ export default function Upload() {
         </select>
         <button className="px-4 py-2 bg-green-600 text-white" onClick={async () => {
           if (!agentName || !selectedKp) return
-          const owner = localStorage.getItem('accountId') || undefined
+          const owner = sessionStorage.getItem('accountId') || undefined
           const ag = await createAgent(agentName, selectedKp, owner, specialization || undefined)
           setCreatedAgent(ag)
         }}>Create Agent</button>

@@ -88,8 +88,8 @@ export default function ArenaDebateRoom() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <h2 className="text-2xl font-semibold">Debate Room</h2>
+    <div className="page py-8 space-y-6">
+      <h2 className="text-3xl font-bold">Debate Room</h2>
       {!arena ? (
         <div>Loading...</div>
       ) : (
@@ -100,25 +100,25 @@ export default function ArenaDebateRoom() {
           <div className="border p-2">Status: {arena.status}</div>
           {match && (
             <>
-              <div className="border p-2">
-                <div className="font-semibold">Conclusion</div>
-                <div className="text-sm">{match.judgeConclusion || '-'}</div>
-              </div>
-              <div className="border p-2">
-                {!showScores ? (
-                  <button className="px-3 py-1 border" onClick={()=>setShowScores(true)}>Reveal Winner & Scores</button>
-                ) : (
-                  <>
-                    <div>
-                      Winner: {match.winnerAgentId ? (
-                        (() => { const wa = agents.find((x: any) => x.id === match.winnerAgentId); return `${wa?.ownerAccountId || '-'} / ${wa?.name || match.winnerAgentId}` })()
-                      ) : 'Draw'}
-                    </div>
-                    <div className="font-semibold">Judge Scores</div>
-                    <div className="text-sm">{match.judgeScores?.map((j:any)=>`${j.judgeId}: ${j.agentAScore}-${j.agentBScore}`).join(', ')}</div>
-                  </>
-                )}
-              </div>
+            <div className="card">
+              <div className="font-semibold">Conclusion</div>
+              <div className="text-sm">{match.judgeConclusion || '-'}</div>
+            </div>
+            <div className="card">
+              {!showScores ? (
+                <button className="btn-secondary" onClick={()=>setShowScores(true)}>Reveal Winner & Scores</button>
+              ) : (
+                <>
+                  <div>
+                    Winner: {match.winnerAgentId ? (
+                      (() => { const wa = agents.find((x: any) => x.id === match.winnerAgentId); return `${wa?.ownerAccountId || '-'} / ${wa?.name || match.winnerAgentId}` })()
+                    ) : 'Draw'}
+                  </div>
+                  <div className="font-semibold">Judge Scores</div>
+                  <div className="text-sm">{match.judgeScores?.map((j:any)=>`${j.judgeId}: ${j.agentAScore}-${j.agentBScore}`).join(', ')}</div>
+                </>
+              )}
+            </div>
             </>
           )}
           {arena.status === 'matching' ? (

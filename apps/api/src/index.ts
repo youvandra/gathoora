@@ -58,11 +58,16 @@ app.delete('/knowledge-packs/:id', async (req: Request, res: Response) => {
 
 app.post('/agents', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ name: z.string(), knowledgePackId: z.string(), ownerAccountId: z.string().optional(), specialization: z.string().optional() })
+    const schema = z.object({ name: z.string(), knowledgePackId: z.string().optional(), knowledgePackIds: z.array(z.string()).optional(), ownerAccountId: z.string().optional(), specialization: z.string().optional() })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
-    const ag = await db.createAgent(parsed.data.name, parsed.data.knowledgePackId, parsed.data.ownerAccountId, parsed.data.specialization)
-    res.json(ag)
+    const initial = parsed.data.knowledgePackId || (parsed.data.knowledgePackIds && parsed.data.knowledgePackIds[0])
+    if (!initial) return res.status(400).json({ error: 'knowledgePackId or knowledgePackIds[0] is required' })
+    const ag = await db.createAgent(parsed.data.name, initial, parsed.data.ownerAccountId, parsed.data.specialization)
+    const rest = (parsed.data.knowledgePackIds || []).filter(id => id !== initial)
+    for (const kpId of rest) await db.addAgentKnowledge(ag.id, kpId)
+    const full = await db.getAgent(ag.id)
+    res.json(full)
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })
   }
@@ -79,6 +84,35 @@ app.put('/agents/:id', async (req: Request, res: Response) => {
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const u = await db.updateAgent(req.params.id, parsed.data)
+    if (!u) return res.status(404).json({ error: 'Not found' })
+    res.json(u)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.get('/agents/:id/knowledge-packs', async (req: Request, res: Response) => {
+  const ag = await db.getAgent(req.params.id)
+  if (!ag) return res.status(404).json({ error: 'Not found' })
+  res.json(ag.knowledgePackIds)
+})
+
+app.post('/agents/:id/knowledge-packs', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ knowledgePackId: z.string() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const u = await db.addAgentKnowledge(req.params.id, parsed.data.knowledgePackId)
+    if (!u) return res.status(404).json({ error: 'Not found' })
+    res.json(u)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.delete('/agents/:id/knowledge-packs/:kpId', async (req: Request, res: Response) => {
+  try {
+    const u = await db.removeAgentKnowledge(req.params.id, req.params.kpId)
     if (!u) return res.status(404).json({ error: 'Not found' })
     res.json(u)
   } catch (e: any) {
@@ -103,9 +137,15 @@ app.post('/matches', async (req: Request, res: Response) => {
   const agentA = await db.getAgent(agentAId)
   const agentB = await db.getAgent(agentBId)
   if (!agentA || !agentB) return res.status(404).json({ error: 'Agent not found' })
-  const kpA = await db.getKnowledgePack(agentA.knowledgePackId)
-  const kpB = await db.getKnowledgePack(agentB.knowledgePackId)
-  if (!kpA || !kpB) return res.status(404).json({ error: 'Knowledge pack not found' })
+  const kpAList = (agentA.knowledgePackIds || [])
+  const kpBList = (agentB.knowledgePackIds || [])
+  if (!kpAList.length || !kpBList.length) return res.status(404).json({ error: 'Knowledge pack not found' })
+  const kpAContents: string[] = []
+  const kpBContents: string[] = []
+  for (const id of kpAList) { const kp = await db.getKnowledgePack(id); if (kp) kpAContents.push(kp.content) }
+  for (const id of kpBList) { const kp = await db.getKnowledgePack(id); if (kp) kpBContents.push(kp.content) }
+  const aggA = kpAContents.join('\n\n---\n')
+  const aggB = kpBContents.join('\n\n---\n')
 
   const rounds: RoundName[] = ['opening', 'rebuttal', 'crossfire', 'closing']
   const entries: RoundEntry[] = []
@@ -115,8 +155,8 @@ app.post('/matches', async (req: Request, res: Response) => {
     const sysB = `You are ${agentB.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
     const prevA = entries.filter(e => e.agentId === agentA.id).map(e => `${e.round}: ${e.text}`).join('\n')
     const prevB = entries.filter(e => e.agentId === agentB.id).map(e => `${e.round}: ${e.text}`).join('\n')
-    const promptA = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${kpA.content}\nOpponent said:\n${prevB}`
-    const promptB = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${kpB.content}\nOpponent said:\n${prevA}`
+    const promptA = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
+    const promptB = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
     const aText = await generateText(sysA, promptA)
     const bText = await generateText(sysB, promptB)
     entries.push({ round: r, agentId: agentA.id, text: aText })
@@ -289,7 +329,7 @@ app.post('/arenas/ready', async (req: Request, res: Response) => {
 
 app.post('/arenas/submit-knowledge', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ id: z.string(), side: z.enum(['pros','cons']), accountId: z.string(), agentName: z.string().min(2), content: z.string().min(50) })
+    const schema = z.object({ id: z.string(), side: z.enum(['pros','cons']), accountId: z.string(), agentName: z.string().min(2), content: z.string().min(1) })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const a = await db.getArenaById(parsed.data.id)
@@ -318,6 +358,21 @@ app.post('/arenas/submit-knowledge', async (req: Request, res: Response) => {
     const draftTextField = parsed.data.side === 'pros' ? 'creator_draft_text' : 'joiner_draft_text'
     const draftNameField = parsed.data.side === 'pros' ? 'creator_draft_agent_name' : 'joiner_draft_agent_name'
     const u = await db.updateArenaById(parsed.data.id, { [field]: ag.id, [submittedField]: true, [statusField]: 'finished', [pausedAtField]: null, [draftTextField]: null, [draftNameField]: null })
+    res.json(u)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.post('/arenas/cancel', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ id: z.string() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const a = await db.getArenaById(parsed.data.id)
+    if (!a) return res.status(404).json({ error: 'Not found' })
+    if (a.status === 'completed') return res.status(400).json({ error: 'Arena completed' })
+    const u = await db.updateArenaById(parsed.data.id, { status: 'cancelled' })
     res.json(u)
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })
@@ -416,10 +471,14 @@ app.post('/arenas/start', async (req: Request, res: Response) => {
       const sysB = `You are ${kpB.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
       const prevA = entries.filter(e => e.agentId === kpA.id).map(e => `${e.round}: ${e.text}`).join('\n')
       const prevB = entries.filter(e => e.agentId === kpB.id).map(e => `${e.round}: ${e.text}`).join('\n')
-      const kpAText = (await db.getKnowledgePack(kpA.knowledgePackId))?.content || ''
-      const kpBText = (await db.getKnowledgePack(kpB.knowledgePackId))?.content || ''
-      const promptA = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${kpAText}\nOpponent said:\n${prevB}`
-      const promptB = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${kpBText}\nOpponent said:\n${prevA}`
+      const kpATexts: string[] = []
+      const kpBTexts: string[] = []
+      for (const id of (kpA.knowledgePackIds || [])) { const k = await db.getKnowledgePack(id); if (k) kpATexts.push(k.content) }
+      for (const id of (kpB.knowledgePackIds || [])) { const k = await db.getKnowledgePack(id); if (k) kpBTexts.push(k.content) }
+      const aggA = kpATexts.join('\n\n---\n')
+      const aggB = kpBTexts.join('\n\n---\n')
+      const promptA = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
+      const promptB = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
       const aText = await generateText(sysA, promptA)
       const bText = await generateText(sysB, promptB)
       entries.push({ round: r, agentId: kpA.id, text: aText })
@@ -526,10 +585,14 @@ app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
       const sysB = `You are ${kpB.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
       const prevA = entries.filter(e => e.agentId === kpA.id).map(e => `${e.round}: ${e.text}`).join('\n')
       const prevB = entries.filter(e => e.agentId === kpB.id).map(e => `${e.round}: ${e.text}`).join('\n')
-      const kpAText = (await db.getKnowledgePack(kpA.knowledgePackId))?.content || ''
-      const kpBText = (await db.getKnowledgePack(kpB.knowledgePackId))?.content || ''
-      const promptA = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${kpAText}\nOpponent said:\n${prevB}`
-      const promptB = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${kpBText}\nOpponent said:\n${prevA}`
+      const kpATexts: string[] = []
+      const kpBTexts: string[] = []
+      for (const id of (kpA.knowledgePackIds || [])) { const k = await db.getKnowledgePack(id); if (k) kpATexts.push(k.content) }
+      for (const id of (kpB.knowledgePackIds || [])) { const k = await db.getKnowledgePack(id); if (k) kpBTexts.push(k.content) }
+      const aggA = kpATexts.join('\n\n---\n')
+      const aggB = kpBTexts.join('\n\n---\n')
+      const promptA = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
+      const promptB = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
       const aTextFull = await generateText(sysA, promptA)
       const bTextFull = await generateText(sysB, promptB)
       for (const chunk of chunkText(aTextFull)) { send('token', { side: 'pros', text: chunk }); await sleep(60) }
