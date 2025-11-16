@@ -237,6 +237,16 @@ app.get('/arenas/:id', async (req: Request, res: Response) => {
   }
 })
 
+app.get('/arenas/code/:code', async (req: Request, res: Response) => {
+  try {
+    const found = await db.getArenaByCode(String(req.params.code || '').toUpperCase())
+    if (!found) return res.status(404).json({ error: 'Not found' })
+    res.json(found)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.get('/arenas', async (req: Request, res: Response) => {
   try {
     const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined

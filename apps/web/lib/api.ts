@@ -116,6 +116,11 @@ export async function getArenaById(id: string) {
   return r.json()
 }
 
+export async function getArenaByCode(code: string) {
+  const r = await fetch(`${API_URL}/arenas/code/${encodeURIComponent(code.toUpperCase())}`)
+  return r.json()
+}
+
 export async function joinArena(id: string, joinerAccountId: string) {
   const r = await fetch(`${API_URL}/arenas/join`, {
     method: 'POST',

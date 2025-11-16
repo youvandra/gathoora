@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { listAgents, listMatches, createArena, getArenaById, joinArenaByCode, startArena, setArenaReady, listArenas, deleteArena } from '../lib/api'
+import { listAgents, listMatches, createArena, getArenaById, getArenaByCode, joinArenaByCode, startArena, setArenaReady, listArenas, deleteArena } from '../lib/api'
 
 export default function Arena() {
   const [agents, setAgents] = useState<any[]>([])
@@ -9,6 +9,8 @@ export default function Arena() {
   const [modal, setModal] = useState<null | { type: 'create' | 'join' }>(null)
   const [createdId, setCreatedId] = useState('')
   const [inputId, setInputId] = useState('')
+  const [joinStep, setJoinStep] = useState<'enter'|'choose'|'error'>('enter')
+  const [joinArenaMeta, setJoinArenaMeta] = useState<any | null>(null)
   const [arena, setArena] = useState<any | null>(null)
   const [match, setMatch] = useState<any | null>(null)
   const [recent, setRecent] = useState<any[]>([])
@@ -33,7 +35,7 @@ export default function Arena() {
       <h2 className="text-3xl font-bold">Arena</h2>
       <div className="flex gap-3">
         <button className="btn-primary" onClick={()=> setModal({ type: 'create' })}>Create Arena</button>
-        <button className="btn-secondary" onClick={()=> setModal({ type: 'join' })}>Join Arena</button>
+        <button className="btn-secondary" onClick={()=> { setModal({ type: 'join' }); setJoinStep('enter'); setJoinArenaMeta(null); setInputId('') }}>Join Arena</button>
       </div>
       <div className="space-y-2">
         <h3 className="text-xl font-semibold">My Arena</h3>
@@ -155,30 +157,64 @@ export default function Arena() {
             )}
             {modal.type === 'join' && (
               <div className="space-y-3">
-                <div className="font-semibold">Join Arena</div>
-                <input className="input" placeholder="Arena Code" value={inputId} onChange={e => setInputId(e.target.value.toUpperCase())} />
-                <div className="flex gap-2 justify-end">
-                  <button className="btn-outline" onClick={()=> setModal(null)}>Cancel</button>
-                  <button className="btn-secondary" onClick={async () => {
-                    const acc = sessionStorage.getItem('accountId') || ''
-                    const code = inputId.trim().toUpperCase()
-                    if (!acc || !code) return
-                    try {
-                      const joined = await joinArenaByCode(code, acc)
-                      setModal(null)
-                      if (typeof window !== 'undefined') window.location.href = `/arena/${joined.id}`
-                      pollingRef.current = setInterval(async () => {
-                        const curr = await getArenaById(joined.id)
-                        setArena(curr)
-                        if (curr.match_id) {
-                          clearInterval(pollingRef.current)
+                {joinStep === 'enter' && (
+                  <>
+                    <div className="font-semibold">Join Arena</div>
+                    <input className="input" placeholder="Arena Code" value={inputId} onChange={e => setInputId(e.target.value.toUpperCase())} />
+                    <div className="flex gap-2 justify-end">
+                      <button className="btn-outline" onClick={()=> setModal(null)}>Cancel</button>
+                      <button className="btn-secondary" onClick={async () => {
+                        const code = inputId.trim().toUpperCase()
+                        if (!code) return
+                        const found = await getArenaByCode(code)
+                        if (found && !found.error && found.id) {
+                          setJoinArenaMeta(found)
+                          setJoinStep('choose')
+                        } else {
+                          setJoinStep('error')
                         }
-                      }, 2000)
-                    } catch (e: any) {
-                      alert(e?.message || 'Failed to join arena')
-                    }
-                  }}>Join</button>
-                </div>
+                      }}>Next</button>
+                    </div>
+                  </>
+                )}
+                {joinStep === 'error' && (
+                  <>
+                    <div className="font-semibold">Room Not Found</div>
+                    <div className="text-sm text-brand-brown/60">Code tidak valid atau room tidak tersedia.</div>
+                    <div className="flex gap-2 justify-end">
+                      <button className="btn-secondary" onClick={()=> setJoinStep('enter')}>Back</button>
+                      <button className="btn-outline" onClick={()=> setModal(null)}>Close</button>
+                    </div>
+                  </>
+                )}
+                {joinStep === 'choose' && joinArenaMeta && (
+                  <>
+                    <div className="font-semibold">Room Ditemukan</div>
+                    <div className="text-sm">
+                      <div>Code <span className="font-mono">{joinArenaMeta.code}</span></div>
+                      <div className="font-semibold mt-1">{joinArenaMeta.topic}</div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button className="btn-outline" onClick={()=> setModal(null)}>Cancel</button>
+                      <button className="btn-secondary" onClick={async () => {
+                        const acc = sessionStorage.getItem('accountId') || ''
+                        const joined = await joinArenaByCode(joinArenaMeta.code, acc)
+                        if (joined && joined.id && !joined.error) {
+                          setModal(null)
+                          if (typeof window !== 'undefined') window.location.href = `/arena/${joined.id}`
+                        } else {
+                          alert('Room penuh atau tidak tersedia. Membuka sebagai watcher.')
+                          setModal(null)
+                          if (typeof window !== 'undefined') window.location.href = `/arena/${joinArenaMeta.id}`
+                        }
+                      }}>Join as Player</button>
+                      <button className="btn-primary" onClick={() => {
+                        setModal(null)
+                        if (typeof window !== 'undefined') window.location.href = `/arena/${joinArenaMeta.id}`
+                      }}>Join as Watcher</button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
