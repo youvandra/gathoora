@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import SignClient from '@walletconnect/sign-client'
-import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase'
 
 export default function Home() {
@@ -18,88 +16,74 @@ export default function Home() {
     }
   }, [])
 
-  async function getSignClient() {
-    const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID
-    const relayUrl = process.env.NEXT_PUBLIC_WC_RELAY_URL || 'wss://relay.walletconnect.com'
-    if (!projectId) throw new Error('Missing NEXT_PUBLIC_WC_PROJECT_ID')
+  async function getHashConnect() {
     const w: any = typeof window !== 'undefined' ? window : {}
-    if (w.__wc_client) return w.__wc_client
-    const client = await SignClient.init({
-      projectId,
-      relayUrl,
-      metadata: { name: 'Debate Arena AI', description: 'Agent-to-Agent Debate Arena', url: 'http://localhost:3000', icons: [] }
-    })
-    w.__wc_client = client
-    return client
+    if (w.__hashconnect) return w.__hashconnect
+    const mod: any = await import('hashconnect')
+    const sdk: any = await import('@hashgraph/sdk')
+    const HashConnect = mod.HashConnect || mod.default
+    const LedgerId = sdk.LedgerId || sdk.default?.LedgerId
+    const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID
+    const network = process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet'
+    if (!projectId) throw new Error('Missing NEXT_PUBLIC_WC_PROJECT_ID')
+    const ledger = network === 'mainnet' ? LedgerId.MAINNET : LedgerId.TESTNET
+    const appMetadata = { name: 'Debate Arena AI', description: 'Agent-to-Agent Debate Arena', icons: [], url: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000' }
+    const hc = new HashConnect(ledger, projectId, appMetadata, true)
+    w.__hashconnect = hc
+    return hc
   }
 
   async function handleConnect() {
     if (connectingRef.current) return
     connectingRef.current = true
     setStatus('Connecting wallet...')
-    const network = process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet'
-    let client
+    let hc: any
     try {
-      client = await getSignClient()
+      hc = await getHashConnect()
     } catch (e: any) {
-      setStatus(e.message || 'WalletConnect init error')
+      setStatus(e?.message || 'HashConnect init error')
       connectingRef.current = false
       return
     }
-    const { uri, approval } = await client.connect({
-      optionalNamespaces: {
-        hedera: {
-          methods: ['hedera_signMessage', 'hedera_signTransaction'],
-          chains: [`hedera:${network}`],
-          events: ['accountsChanged', 'chainChanged']
-        }
-      }
-    })
-    if (uri) {
-      const link = `https://hashpack.app/wc?uri=${encodeURIComponent(uri)}`
-      const el = document.getElementById('wc-link')
-      if (el) el.setAttribute('href', link)
-      try {
-        const dataUrl = await QRCode.toDataURL(uri)
-        setQr(dataUrl)
-      } catch {}
-      setStatus('Open HashPack and approve connection')
-    }
-    const session = await approval()
-    const ns = session.namespaces['hedera']
-    const acct = ns?.accounts?.[0] || ''
-    const parts = acct.split(':')
-    const accId = parts[2] || ''
-    if (!accId) {
-      setStatus('Connected but account not found')
-      connectingRef.current = false
-      return
-    }
-    try { localStorage.setItem('wcTopic', (session as any).topic) } catch {}
-    localStorage.setItem('accountId', accId)
-    setAccountId(accId)
-    setConnected(true)
-    setStatus('Connected')
     try {
-      const { data: existing } = await supabase.from('users').select('*').eq('account_id', accId).maybeSingle()
-      if (!existing) {
-        await supabase.from('users').insert({ account_id: accId, name: `User-${accId}` })
-      }
-    } catch {}
-    connectingRef.current = false
+      hc.pairingEvent.once(async (data: any) => {
+        const accId = (data?.accountIds?.[0] || '').toString()
+        const topic = data?.topic || ''
+        if (!accId) {
+          setStatus('Connected but account not found')
+          connectingRef.current = false
+          return
+        }
+        try { localStorage.setItem('hcTopic', topic) } catch {}
+        localStorage.setItem('accountId', accId)
+        setAccountId(accId)
+        setConnected(true)
+        setStatus('Connected')
+        try {
+          const { data: existing } = await supabase.from('users').select('*').eq('account_id', accId).maybeSingle()
+          if (!existing) {
+            await supabase.from('users').insert({ account_id: accId, name: `User-${accId}` })
+          }
+        } catch {}
+        connectingRef.current = false
+      })
+      await hc.init()
+      hc.openPairingModal()
+    } catch (e: any) {
+      setStatus(e?.message || 'Connect error')
+      connectingRef.current = false
+    }
   }
 
   async function handleDisconnect() {
     try {
-      const topic = typeof window !== 'undefined' ? localStorage.getItem('wcTopic') : null
-      const client = await getSignClient()
+      const topic = typeof window !== 'undefined' ? localStorage.getItem('hcTopic') : null
+      const hc = await getHashConnect()
       if (topic) {
-        try {
-          await (client as any).disconnect({ topic })
-        } catch {}
+        try { await hc.disconnect(topic) } catch {}
       }
     } catch {}
-    try { localStorage.removeItem('wcTopic') } catch {}
+    try { localStorage.removeItem('hcTopic') } catch {}
     try { localStorage.removeItem('accountId') } catch {}
     setConnected(false)
     setAccountId('')
@@ -125,12 +109,6 @@ export default function Home() {
             <>
               <button className="px-4 py-2 bg-purple-600 text-white rounded" onClick={handleConnect}>Connect Wallet</button>
               {status && <div className="text-sm text-gray-700">{status}</div>}
-              <div className="space-y-2">
-                <a id="wc-link" className="text-sm text-purple-700 underline" href="#" target="_blank" rel="noreferrer">Open HashPack WalletConnect</a>
-                {qr && (
-                  <div className="flex justify-center"><img src={qr} alt="WalletConnect QR" className="border p-2" /></div>
-                )}
-              </div>
             </>
           )}
         </div>
