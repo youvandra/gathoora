@@ -352,12 +352,6 @@ export default function ArenaRoom() {
               </div>
             )}
             {false}
-            {match && (
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div className="text-sm">Final Score (A): {Number(((match.judgeScores||[]).reduce((s: number, j: any)=> s + (j.agentAScore||0), 0))/Math.max(1,(match.judgeScores||[]).length)).toFixed(2)}</div>
-                <div className="text-sm">Final Score (B): {Number(((match.judgeScores||[]).reduce((s: number, j: any)=> s + (j.agentBScore||0), 0))/Math.max(1,(match.judgeScores||[]).length)).toFixed(2)}</div>
-              </div>
-            )}
             {String(arena.status||'').toLowerCase() === 'completed' && (
               <div className="mt-4 flex justify-end">
                 <a className="btn-primary" href={`/arena/${id}/debateroom`}>View Results</a>
@@ -424,8 +418,9 @@ export default function ArenaRoom() {
                           if (myWritingStatus==='paused') {
                             await challengeControl(arena.id, accId, 'resume')
                           }
-                          if (!myWritingStartedAt) {
+                          if (!myWritingStartedAt || !(myWritingStatus==='writing' || myWritingStatus==='paused')) {
                             await challengeControl(arena.id, accId, 'start')
+                            await new Promise(r=>setTimeout(r, 200))
                           }
                         } catch {}
                         await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText)
@@ -441,6 +436,9 @@ export default function ArenaRoom() {
                           if (/not started/i.test(errStr)) {
                             try {
                               await challengeControl(arena.id, accId, 'start')
+                              await new Promise(r=>setTimeout(r, 300))
+                              const a1 = await getArenaById(id as string)
+                              setArena(a1)
                               await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText)
                               const u2 = await submitArenaKnowledge(arena.id, mySide as any, accId, challengeAgentName, challengeText)
                               if (u2 && !u2.error) {

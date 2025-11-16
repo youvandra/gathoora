@@ -150,15 +150,20 @@ app.post('/matches', async (req: Request, res: Response) => {
   const rounds: RoundName[] = ['opening', 'rebuttal', 'crossfire', 'closing']
   const entries: RoundEntry[] = []
 
+  function sys(name: string, r: RoundName) {
+    if (r === 'opening') return `You are ${name}. Use only the provided knowledge. Produce a concise opening that frames the thesis and strongest points strictly from the knowledge. If absolutely no usable content exists, reply "unknown".`
+    if (r === 'rebuttal') return `You are ${name}. Use only the provided knowledge. Produce a focused rebuttal that directly addresses the opponent's claims using evidence from the knowledge. Be specific and avoid generic statements.`
+    if (r === 'crossfire') return `You are ${name}. Use only the provided knowledge. Produce a crossfire-style exchange: challenge the opponent with 2–3 short questions or points and provide compact follow-ups that expose weaknesses based on what the opponent said. Keep it crisp and refer to the knowledge.`
+    return `You are ${name}. Use only the provided knowledge. Produce a clear closing that summarizes your strongest arguments and gives a definitive conclusion aligned with the knowledge. Avoid introducing new points not grounded in the knowledge.`
+  }
+
   for (const r of rounds) {
-    const sysA = `You are ${agentA.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
-    const sysB = `You are ${agentB.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
     const prevA = entries.filter(e => e.agentId === agentA.id).map(e => `${e.round}: ${e.text}`).join('\n')
     const prevB = entries.filter(e => e.agentId === agentB.id).map(e => `${e.round}: ${e.text}`).join('\n')
     const promptA = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
     const promptB = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
-    const aText = await generateText(sysA, promptA)
-    const bText = await generateText(sysB, promptB)
+    const aText = await generateText(sys(agentA.name, r), promptA)
+    const bText = await generateText(sys(agentB.name, r), promptB)
     entries.push({ round: r, agentId: agentA.id, text: aText })
     entries.push({ round: r, agentId: agentB.id, text: bText })
   }
