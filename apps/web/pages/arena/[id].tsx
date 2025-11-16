@@ -71,10 +71,35 @@ export default function ArenaRoom() {
   const MIN_WORDS = 50
   const countWords = (txt?: string) => String(txt||'').trim().split(/\s+/).filter(Boolean).length
   const isTextSufficient = (txt?: string) => countWords(txt) >= MIN_WORDS
+  const countChars = (txt?: string) => String(txt||'').length
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const autoSubmitRef = useRef<boolean>(false)
   const [oppTimeLeft, setOppTimeLeft] = useState<number>(0)
   const autoOppCheckRef = useRef<boolean>(false)
+  const lastSavedRef = useRef<{ name: string; text: string }>({ name: '', text: '' })
+  const submitDisabled = !mySide || timeLeft<=0 || !challengeAgentName || !(myWritingStatus==='writing' || myWritingStatus==='paused') || !isTextSufficient(challengeText)
+  const canStart = !!arena && !arena.match_id && (
+    (arena.game_type !== 'challenge' && arena.status === 'select_agent' && arena.agent_a_id && arena.agent_b_id && arena.creator_ready && arena.joiner_ready) ||
+    (arena.game_type === 'challenge' && arena.status === 'challenge' && arena.agent_a_id && arena.agent_b_id && arena.creator_knowledge_submitted && arena.joiner_knowledge_submitted)
+  )
+  useEffect(() => {
+    if (!arena || arena.status !== 'challenge') return
+    if (!(isCreator || isJoiner)) return
+    if (myWritingStatus !== 'writing') return
+    if (timeLeft <= 0) return
+    const nameNow = challengeAgentName || ''
+    const textNow = challengeText || ''
+    if (!nameNow && !textNow) return
+    const changed = nameNow !== lastSavedRef.current.name || textNow !== lastSavedRef.current.text
+    if (!changed) return
+    const t = setTimeout(async () => {
+      try {
+        await saveArenaDraft(arena.id, accId, nameNow, textNow)
+        lastSavedRef.current = { name: nameNow, text: textNow }
+      } catch {}
+    }, 600)
+    return () => clearTimeout(t)
+  }, [arena?.status, isCreator, isJoiner, myWritingStatus, timeLeft, challengeAgentName, challengeText])
   useEffect(() => {
     if (!arena || arena.status !== 'challenge' || !arena.challenge_minutes) return
     if (!myWritingStartedAt) { setTimeLeft(arena.challenge_minutes * 60); return }
@@ -102,7 +127,10 @@ export default function ArenaRoom() {
   useEffect(() => {
     if (!arena || arena.status !== 'challenge') return
     if (!myWritingStartedAt) return
-    if (timeLeft > 0) return
+    const totalSecs = (arena.challenge_minutes || 0) * 60
+    const elapsedSecs = Math.floor((Date.now() - new Date(myWritingStartedAt).getTime()) / 1000) - (myPausedSecs || 0)
+    const leftNow = Math.max(0, totalSecs - Math.max(0, elapsedSecs))
+    if (leftNow > 0) return
     if (autoSubmitRef.current) return
     autoSubmitRef.current = true
     ;(async () => {
@@ -113,9 +141,10 @@ export default function ArenaRoom() {
               await challengeControl(arena.id, accId, 'start')
             }
             const currText = challengeText || myDraftText || ''
-            if (challengeAgentName && currText && mySide && isTextSufficient(currText)) {
-              await saveArenaDraft(arena.id, accId, challengeAgentName, currText)
-              const u = await submitArenaKnowledge(arena.id, mySide as any, accId, challengeAgentName, currText)
+            const agentNameAuto = challengeAgentName || (isCreator ? (arena?.creator_draft_agent_name || '') : (isJoiner ? (arena?.joiner_draft_agent_name || '') : '')) || 'Auto Agent'
+            if (currText && mySide && isTextSufficient(currText)) {
+              await saveArenaDraft(arena.id, accId, agentNameAuto, currText)
+              const u = await submitArenaKnowledge(arena.id, mySide as any, accId, agentNameAuto, currText)
               if (u && !u.error) {
                 const a0 = await getArenaById(id as string)
                 setArena(a0)
@@ -124,9 +153,11 @@ export default function ArenaRoom() {
             }
           } catch {}
         }
-        const needCancel = (!youSubmitted) && !isTextSufficient(myDraftText || challengeText || '')
-        if (needCancel) {
-          await cancelArena(arena.id)
+        const myInsufficient = !youSubmitted && !isTextSufficient(myDraftText || challengeText || '')
+        const someoneStarted = !!myWritingStartedAt || !!(isCreator ? arena?.joiner_writing_started_at : arena?.creator_writing_started_at)
+        const bothInsufficientAndNoStart = !someoneStarted && (!youSubmitted && !isTextSufficient(myDraftText || challengeText || '')) && (!oppSubmitted && !isTextSufficient(oppDraftText || ''))
+        if (myInsufficient || bothInsufficientAndNoStart) {
+          await cancelArena(arena.id, 'Time over')
           const a = await getArenaById(id as string)
           setArena(a)
           pushToast('Waktu habis. Arena dibatalkan', 'error')
@@ -171,12 +202,17 @@ export default function ArenaRoom() {
     if (autoOppCheckRef.current) return
     const oppWritingStartedAt: string | undefined = isCreator ? arena?.joiner_writing_started_at : arena?.creator_writing_started_at
     if (!oppWritingStartedAt) return
-    if (oppTimeLeft > 0) return
+    const totalSecs = (arena.challenge_minutes || 0) * 60
+    const oppPaused = isCreator ? (arena?.joiner_paused_secs || 0) : (arena?.creator_paused_secs || 0)
+    const oppElapsed = Math.floor((Date.now() - new Date(oppWritingStartedAt).getTime()) / 1000) - (oppPaused || 0)
+    const oppLeftNow = Math.max(0, totalSecs - Math.max(0, oppElapsed))
+    if (oppLeftNow > 0) return
     autoOppCheckRef.current = true
     ;(async () => {
       try {
-        if (!oppSubmitted && !isTextSufficient(oppDraftText || '')) {
-          await cancelArena(arena.id)
+        const oppInsufficient = !oppSubmitted && !isTextSufficient(oppDraftText || '')
+        if (oppInsufficient) {
+          await cancelArena(arena.id, 'Time over')
           const a = await getArenaById(id as string)
           setArena(a)
           pushToast('Waktu habis. Arena dibatalkan', 'error')
@@ -252,9 +288,11 @@ export default function ArenaRoom() {
           </div>
         </div>
         {arena && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <span className="badge bg-white border text-brand-brown/80">{arena.game_type === 'challenge' ? 'Challenge' : 'Import'}</span>
-            <span className={`badge ${String(arena.status||'').toLowerCase() === 'completed' ? 'bg-green-100 text-green-800' : String(arena.status||'').toLowerCase() === 'cancelled' ? 'bg-red-100 text-red-800' : String(arena.status||'').toLowerCase() === 'matching' ? 'bg-blue-100 text-blue-800' : String(arena.status||'').toLowerCase() === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{arena.status}</span>
+            <div className="flex flex-col">
+              <span className={`badge ${String(arena.status||'').toLowerCase() === 'completed' ? 'bg-green-100 text-green-800' : String(arena.status||'').toLowerCase() === 'cancelled' ? 'bg-red-100 text-red-800' : String(arena.status||'').toLowerCase() === 'matching' ? 'bg-blue-100 text-blue-800' : String(arena.status||'').toLowerCase() === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{arena.status}</span>
+            </div>
           </div>
         )}
       </div>
@@ -276,70 +314,50 @@ export default function ArenaRoom() {
             <div className="text-sm text-brand-brown/60">Topic</div>
             <div className="text-xl font-semibold">{arena.topic}</div>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <div className="font-semibold">Participants</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-block w-2 h-2 rounded-full ${isCreator || isJoiner ? (youReady ? 'bg-green-500' : 'bg-gray-400') : 'bg-gray-400'}`}></span>
-                      <span className="text-sm">You</span>
-                    </div>
-                    <div className="text-xs text-brand-brown/60 font-mono truncate">{(isCreator || isJoiner) ? (isCreator ? (arena.creator_account_id || '-') : (arena.joiner_account_id || '-')) : '-'}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-block w-2 h-2 rounded-full ${oppReady ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                      <span className="text-sm">Opponent</span>
-                    </div>
-                    <div className="text-xs text-brand-brown/60 font-mono truncate">{isCreator ? (arena.joiner_account_id || '-') : (arena.creator_account_id || '-')}</div>
-                  </div>
+              <div className="card p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">You</div>
+                  <span className={`badge ${youReady ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{youReady ? 'Ready' : 'Not ready'}</span>
                 </div>
-                <div className="mt-3">
-                  <div className="font-semibold">Side</div>
-                  <div className="mt-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm text-brand-brown/60">You</div>
-                      <span className={`badge ${mySide==='pros' ? 'bg-green-100 text-green-800' : mySide==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>
-                        <span className="font-bold">{mySide || '-'}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm text-brand-brown/60">Opponent</div>
-                      <span className={`badge ${(isCreator ? arena.joiner_side : arena.creator_side)==='pros' ? 'bg-green-100 text-green-800' : (isCreator ? arena.joiner_side : arena.creator_side)==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>
-                        {(isCreator ? (arena.joiner_side || '-') : (arena.creator_side || '-'))}
-                      </span>
-                    </div>
-                  </div>
+                <div className="text-xs text-brand-brown/60 font-mono truncate">{(isCreator || isJoiner) ? (isCreator ? (arena.creator_account_id || '-') : (arena.joiner_account_id || '-')) : '-'}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-brand-brown/60">Side</div>
+                  <span className={`badge ${mySide==='pros' ? 'bg-green-100 text-green-800' : mySide==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{mySide || '-'}</span>
                 </div>
-                <div className="mt-3">
-                  <div className="font-semibold">Submitted</div>
-                  <div className="flex items-center gap-2">
-                    <span className="badge bg-white border text-brand-brown/80">You {youSubmitted ? '✅' : '❌'}</span>
-                    <span className="badge bg-white border text-brand-brown/80">Opponent {oppSubmitted ? '✅' : '❌'}</span>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-brand-brown/60">Submitted</div>
+                  <span className="badge bg-white border text-brand-brown/80">{youSubmitted ? '✅' : '❌'}</span>
                 </div>
-                {(String(arena.status||'').toLowerCase() === 'waiting') && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {isCreator && <button className="btn-outline" onClick={()=>handleReady('creator')}>Ready</button>}
-                    {isJoiner && <button className="btn-outline" onClick={()=>handleReady('joiner')}>Ready</button>}
-                  </div>
-                )}
-                {(String(arena.status||'').toLowerCase() !== 'completed') && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {isCreator && !arena.match_id && ((arena.game_type !== 'challenge' && arena.status === 'select_agent' && arena.agent_a_id && arena.agent_b_id && arena.creator_ready && arena.joiner_ready) || (arena.game_type === 'challenge' && arena.status === 'challenge' && arena.agent_a_id && arena.agent_b_id && arena.creator_knowledge_submitted && arena.joiner_knowledge_submitted)) && (
-                      <button className="btn-primary" onClick={handleStart}>Start Debate</button>
-                    )}
-                  </div>
-                )}
-                {match && (
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="text-sm">Final Score (A): {Number(((match.judgeScores||[]).reduce((s: number, j: any)=> s + (j.agentAScore||0), 0))/Math.max(1,(match.judgeScores||[]).length)).toFixed(2)}</div>
-                    <div className="text-sm">Final Score (B): {Number(((match.judgeScores||[]).reduce((s: number, j: any)=> s + (j.agentBScore||0), 0))/Math.max(1,(match.judgeScores||[]).length)).toFixed(2)}</div>
-                  </div>
-                )}
               </div>
-              
+              <div className="card p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">Opponent</div>
+                  <span className={`badge ${oppReady ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{oppReady ? 'Ready' : 'Not ready'}</span>
+                </div>
+                <div className="text-xs text-brand-brown/60 font-mono truncate">{isCreator ? (arena.joiner_account_id || '-') : (arena.creator_account_id || '-')}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-brand-brown/60">Side</div>
+                  <span className={`badge ${(isCreator ? arena.joiner_side : arena.creator_side)==='pros' ? 'bg-green-100 text-green-800' : (isCreator ? arena.joiner_side : arena.creator_side)==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{(isCreator ? (arena.joiner_side || '-') : (arena.creator_side || '-'))}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-brand-brown/60">Submitted</div>
+                  <span className="badge bg-white border text-brand-brown/80">{oppSubmitted ? '✅' : '❌'}</span>
+                </div>
+              </div>
             </div>
+            {(String(arena.status||'').toLowerCase() === 'waiting') && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {isCreator && <button className={`btn-outline ${youReady ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed hover:bg-gray-200' : ''}`} onClick={()=>handleReady('creator')} disabled={youReady}>Ready</button>}
+                {isJoiner && <button className={`btn-outline ${youReady ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed hover:bg-gray-200' : ''}`} onClick={()=>handleReady('joiner')} disabled={youReady}>Ready</button>}
+              </div>
+            )}
+            {false}
+            {match && (
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="text-sm">Final Score (A): {Number(((match.judgeScores||[]).reduce((s: number, j: any)=> s + (j.agentAScore||0), 0))/Math.max(1,(match.judgeScores||[]).length)).toFixed(2)}</div>
+                <div className="text-sm">Final Score (B): {Number(((match.judgeScores||[]).reduce((s: number, j: any)=> s + (j.agentBScore||0), 0))/Math.max(1,(match.judgeScores||[]).length)).toFixed(2)}</div>
+              </div>
+            )}
             {String(arena.status||'').toLowerCase() === 'completed' && (
               <div className="mt-4 flex justify-end">
                 <a className="btn-primary" href={`/arena/${id}/debateroom`}>View Results</a>
@@ -392,11 +410,15 @@ export default function ArenaRoom() {
                       <button className="btn-outline" onClick={async ()=>{ await challengeControl(arena.id, accId, 'resume'); const a = await getArenaById(id as string); setArena(a) }}>Resume</button>
                     )}
                   </div>
-                  <input className="input" placeholder="Agent Name" value={challengeAgentName} onChange={e => setChallengeAgentName(e.target.value)} />
-                  <textarea className="textarea h-40" value={challengeText} onChange={e => setChallengeText(e.target.value)} onPaste={e => e.preventDefault()} onDrop={e => e.preventDefault()} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) { e.preventDefault() } }} placeholder="Type your knowledge manually" disabled={myWritingStatus!=='writing'} />
+                  <input className="input" placeholder="Agent Name" value={challengeAgentName} onChange={e => setChallengeAgentName(e.target.value)} disabled={myWritingStatus!=='writing' || timeLeft<=0} />
+                  <textarea className="textarea h-40" value={challengeText} onChange={e => setChallengeText(e.target.value)} onPaste={e => e.preventDefault()} onDrop={e => e.preventDefault()} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) { e.preventDefault() } }} placeholder="Type your knowledge manually" disabled={myWritingStatus!=='writing' || timeLeft<=0} />
+                  <div className="text-xs text-brand-brown/60 flex items-center gap-2">
+                    <span>Characters {countChars(challengeText)}</span>
+                    <span>Words {countWords(challengeText)}</span>
+                    <span className={`badge ${isTextSufficient(challengeText) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{isTextSufficient(challengeText) ? 'Cukup' : 'Belum cukup'}</span>
+                  </div>
                   <div className="flex gap-2">
-                    <button className="btn-outline" disabled={myWritingStatus!=='writing'} onClick={async ()=>{ await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText); const a = await getArenaById(id as string); setArena(a) }}>Save</button>
-                    <button className="btn-secondary" disabled={!mySide || timeLeft<=0 || !challengeAgentName || !(myWritingStatus==='writing' || myWritingStatus==='paused') || !(challengeText && challengeText.length>0)} onClick={async ()=>{
+                    <button className={`btn-secondary ${submitDisabled ? 'bg-gray-200 text-gray-500 hover:bg-gray-200 cursor-not-allowed' : ''}`} disabled={submitDisabled} onClick={async ()=>{
                       try {
                         try {
                           if (myWritingStatus==='paused') {
@@ -492,6 +514,17 @@ export default function ArenaRoom() {
                 </div>
               ) : (
                 <div className="text-sm">Participants only</div>
+              )}
+            </div>
+          )}
+          
+          {arena && canStart && (
+            <div className="mt-6 flex justify-end">
+              {isCreator && (
+                <button className="btn-primary" onClick={handleStart}>Start Debate</button>
+              )}
+              {isJoiner && (
+                <span className="badge bg-white border text-brand-brown/80">Waiting for start</span>
               )}
             </div>
           )}

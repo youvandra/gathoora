@@ -366,13 +366,17 @@ app.post('/arenas/submit-knowledge', async (req: Request, res: Response) => {
 
 app.post('/arenas/cancel', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ id: z.string() })
+    const schema = z.object({ id: z.string(), reason: z.string().max(200).optional() })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const a = await db.getArenaById(parsed.data.id)
     if (!a) return res.status(404).json({ error: 'Not found' })
     if (a.status === 'completed') return res.status(400).json({ error: 'Arena completed' })
-    const u = await db.updateArenaById(parsed.data.id, { status: 'cancelled' })
+    let u = await db.updateArenaById(parsed.data.id, parsed.data.reason ? { status: 'cancelled', cancel_reason: parsed.data.reason } : { status: 'cancelled' })
+    if (!u && parsed.data.reason) {
+      u = await db.updateArenaById(parsed.data.id, { status: 'cancelled' })
+      if (u) u.cancel_reason = parsed.data.reason
+    }
     res.json(u)
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })

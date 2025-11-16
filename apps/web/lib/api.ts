@@ -199,11 +199,11 @@ export async function saveArenaDraft(id: string, accountId: string, agentName?: 
   }
 }
 
-export async function cancelArena(id: string) {
+export async function cancelArena(id: string, reason?: string) {
   const r = await fetch(`${API_URL}/arenas/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id })
+    body: JSON.stringify({ id, reason })
   })
   return r.json()
 }

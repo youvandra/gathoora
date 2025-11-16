@@ -43,13 +43,14 @@ export default function Arena() {
           const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
             const isCreator = a.creator_account_id === accId
             const isJoiner = a.joiner_account_id === accId
+            const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
             return (
               <div key={a.id} className="card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <a href={`/arena/${a.id}`} className="block">
                       <div className="text-sm text-brand-brown/60">Code <span className="font-mono">{a.code || '-'}</span></div>
-                      <div className="text-lg font-semibold truncate" title={a.topic}>{a.topic}</div>
+                      <div className="text-lg font-semibold" title={a.topic}>{titleText}</div>
                     </a>
                     {statusText === 'waiting' && (
                       <div className="space-y-1">
