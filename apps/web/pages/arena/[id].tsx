@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { listAgents, getArenaById, joinArena, selectArenaAgent, setArenaReady, startArena, deleteArena, submitArenaKnowledge, challengeControl, saveArenaDraft, getMatch, listKnowledgePacks, cancelArena } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 
 export default function ArenaRoom() {
   const router = useRouter()
@@ -12,6 +13,8 @@ export default function ArenaRoom() {
   const [match, setMatch] = useState<any | null>(null)
   const [packs, setPacks] = useState<any[]>([])
   const pollingRef = useRef<any>(null)
+  const [p1Name, setP1Name] = useState('')
+  const [p2Name, setP2Name] = useState('')
 
   function pushToast(text: string, kind: 'success'|'error'|'info' = 'info') {
     const tid = `${Date.now()}-${Math.random()}`
@@ -49,6 +52,22 @@ export default function ArenaRoom() {
     }, 2000)
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
   }, [id])
+
+  useEffect(() => {
+    const creatorId = String(arena?.creator_account_id || '')
+    const joinerId = String(arena?.joiner_account_id || '')
+    const ids = [creatorId, joinerId].filter(x => !!x)
+    if (!ids.length) { setP1Name(''); setP2Name(''); return }
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('users').select('account_id,name').in('account_id', ids)
+        const map: Record<string, string> = {}
+        ;(data || []).forEach((u: any) => { map[String(u.account_id)] = String(u.name || '') })
+        setP1Name(map[creatorId] || '')
+        setP2Name(map[joinerId] || '')
+      } catch {}
+    })()
+  }, [arena?.creator_account_id, arena?.joiner_account_id])
 
   const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
   const isCreator = arena?.creator_account_id === accId
@@ -323,7 +342,10 @@ export default function ArenaRoom() {
                   <div className="font-semibold">{`Player 1${isCreator ? '(You)' : ''}`}</div>
                   <span className={`badge ${p1Ready ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{p1Ready ? 'Ready' : 'Not ready'}</span>
                 </div>
-                <div className="text-xs text-brand-brown/60 font-mono truncate">{arena.creator_account_id || '-'}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-brand-brown/60">Name</div>
+                  <div className="text-xs text-brand-brown/60 truncate">{p1Name || '-'}</div>
+                </div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-brand-brown/60">Side</div>
                   <span className={`badge ${arena.creator_side==='pros' ? 'bg-green-100 text-green-800' : arena.creator_side==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{arena.creator_side || '-'}</span>
@@ -338,7 +360,7 @@ export default function ArenaRoom() {
                   <div className="font-semibold">{`Player 2${isJoiner ? '(You)' : ''}`}</div>
                   <span className={`badge ${p2Ready ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{p2Ready ? 'Ready' : 'Not ready'}</span>
                 </div>
-                <div className="text-xs text-brand-brown/60 font-mono truncate">{arena.joiner_account_id || '-'}</div>
+                <div className="text-xs text-brand-brown/60 truncate">{p2Name || '-'}</div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-brand-brown/60">Side</div>
                   <span className={`badge ${arena.joiner_side==='pros' ? 'bg-green-100 text-green-800' : arena.joiner_side==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{arena.joiner_side || '-'}</span>
@@ -375,8 +397,8 @@ export default function ArenaRoom() {
                     <option value="">Select Your Agent</option>
                     {agents.filter(x => x.ownerAccountId === accId).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
-                  {isCreator && arena.creator_side && arena.status === 'select_agent' && <button className="btn-secondary" onClick={()=>handleSelectAgent(arena.creator_side)}>Set My Agent</button>}
-                  {isJoiner && arena.joiner_side && arena.status === 'select_agent' && <button className="btn-secondary" onClick={()=>handleSelectAgent(arena.joiner_side)}>Set My Agent</button>}
+                  {isCreator && arena.creator_side && arena.status === 'select_agent' && <button className="btn-secondary whitespace-nowrap" onClick={()=>handleSelectAgent(arena.creator_side)}>Set My Agent</button>}
+                  {isJoiner && arena.joiner_side && arena.status === 'select_agent' && <button className="btn-secondary whitespace-nowrap" onClick={()=>handleSelectAgent(arena.joiner_side)}>Set My Agent</button>}
                 </div>
               )}
             </div>

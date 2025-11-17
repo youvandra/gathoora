@@ -10,6 +10,7 @@ export default function Profile() {
   const [agentCount, setAgentCount] = useState<number>(0)
   const [knowledgeCount, setKnowledgeCount] = useState<number>(0)
   const [status, setStatus] = useState('')
+  const [toasts, setToasts] = useState<{ id: string; text: string; kind: 'success'|'error'|'info' }[]>([])
 
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
@@ -49,8 +50,18 @@ export default function Profile() {
       const { error } = await supabase.from('users').update({ name }).eq('account_id', accountId)
       if (error) throw new Error(error.message || 'Update failed')
       setStatus('Saved')
+      {
+        const tid = `${Date.now()}-${Math.random()}`
+        setToasts(t => [...t, { id: tid, text: 'Name updated', kind: 'success' }])
+        setTimeout(() => { setToasts(t => t.filter(x => x.id !== tid)) }, 3000)
+      }
     } catch (e: any) {
       setStatus(e?.message || 'Save failed')
+      {
+        const tid = `${Date.now()}-${Math.random()}`
+        setToasts(t => [...t, { id: tid, text: e?.message || 'Update failed', kind: 'error' }])
+        setTimeout(() => { setToasts(t => t.filter(x => x.id !== tid)) }, 4000)
+      }
     } finally {
       setSaving(false)
     }
@@ -58,6 +69,16 @@ export default function Profile() {
 
   return (
     <div className="page py-8 space-y-6">
+      <div className="toast-stack">
+        {toasts.map(t => (
+          <div key={t.id} className={t.kind==='success' ? 'toast-success' : t.kind==='error' ? 'toast-error' : 'toast'}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm">{t.text}</div>
+              <button className="btn-ghost btn-sm" onClick={()=> setToasts(ts => ts.filter(x => x.id !== t.id))}>Close</button>
+            </div>
+          </div>
+        ))}
+      </div>
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Profile</h2>
         {status && <div className="text-sm text-brand-brown/60">{status}</div>}
@@ -92,4 +113,3 @@ export default function Profile() {
     </div>
   )
 }
-
