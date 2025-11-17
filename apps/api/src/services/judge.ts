@@ -2,8 +2,8 @@ import { JudgeScore } from '../types'
 import { generateText } from './openai'
 
 export async function judgeDebate(topic: string, aText: string, bText: string) {
-  const system = 'You are a strict debate judge panel. Evaluate A vs B using these criteria: 1) Argument Strength, 2) Factual Accuracy, 3) Direct Response Quality, 4) Coherence & Structure, 5) Persuasiveness, 6) Logical Fallacies Detection, 7) Rebuttal Efficiency, 8) Final Position Strength. Use only provided texts.'
-  const prompt = `Topic: ${topic}\nA: ${aText}\nB: ${bText}\nReturn JSON with numeric scores (0-10) per factor and overall 0-1: {"A": {"argument_strength": number, "factual_accuracy": number, "direct_response": number, "coherence": number, "persuasiveness": number, "fallacies": number, "rebuttal_efficiency": number, "final_position": number}, "B": {"argument_strength": number, "factual_accuracy": number, "direct_response": number, "coherence": number, "persuasiveness": number, "fallacies": number, "rebuttal_efficiency": number, "final_position": number}, "overall": {"a": number, "b": number}}`
+  const system = 'You are a strict multi-criteria debate judge. Evaluate A vs B only from their texts. Score 0–10 for these factors: 1) Argument Strength (logic quality, relevance, reasoning, evidence), 2) Factual Accuracy (hallucinations, correctness, consistency with reliable sources), 3) Direct Response Quality (addresses opponent points, avoids dodging), 4) Coherence & Structure (flow, internal consistency, clarity, progression), 5) Persuasiveness (clarity, reasoning, confidence, evidence density), 6) Logical Fallacies Detection (fewer fallacies is better; score this as 0–10 quality where 10 means no fallacies), 7) Rebuttal Efficiency (effectiveness dismantling opponent points), 8) Final Position Strength (completeness of final stance and defense).'
+  const prompt = `Topic: ${topic}\nA: ${aText}\nB: ${bText}\nReturn strict JSON with numeric scores (0–10) per factor and overall (0–1): {"A": {"argument_strength": number, "factual_accuracy": number, "direct_response": number, "coherence": number, "persuasiveness": number, "fallacies": number, "rebuttal_efficiency": number, "final_position": number}, "B": {"argument_strength": number, "factual_accuracy": number, "direct_response": number, "coherence": number, "persuasiveness": number, "fallacies": number, "rebuttal_efficiency": number, "final_position": number}, "overall": {"a": number, "b": number}}`
   const out = await generateText(system, prompt)
   try {
     const parsed = JSON.parse(out)
@@ -14,13 +14,30 @@ export async function judgeDebate(topic: string, aText: string, bText: string) {
       const Bx = parsed?.B
       const to01 = (v: number) => Math.max(0, Math.min(1, v / 10))
       if (Ax && Bx) {
-        const w = { argument_strength: 0.2, factual_accuracy: 0.2, direct_response: 0.15, coherence: 0.15, persuasiveness: 0.1, rebuttal_efficiency: 0.1, final_position: 0.1 }
+        const w = {
+          argument_strength: 0.34,
+          factual_accuracy: 0.25,
+          direct_response: 0.18,
+          rebuttal_efficiency: 0.12,
+          persuasiveness: 0.07,
+          final_position: 0.10
+        }
         const faA = typeof Ax.fallacies === 'number' ? Ax.fallacies : 10
         const faB = typeof Bx.fallacies === 'number' ? Bx.fallacies : 10
-        const fallacyPenaltyA = (10 - faA) / 10 * 0.1
-        const fallacyPenaltyB = (10 - faB) / 10 * 0.1
-        const sumA = (to01(Ax.argument_strength) * w.argument_strength) + (to01(Ax.factual_accuracy) * w.factual_accuracy) + (to01(Ax.direct_response) * w.direct_response) + (to01(Ax.coherence) * w.coherence) + (to01(Ax.persuasiveness) * w.persuasiveness) + (to01(Ax.rebuttal_efficiency) * w.rebuttal_efficiency) + (to01(Ax.final_position) * w.final_position)
-        const sumB = (to01(Bx.argument_strength) * w.argument_strength) + (to01(Bx.factual_accuracy) * w.factual_accuracy) + (to01(Bx.direct_response) * w.direct_response) + (to01(Bx.coherence) * w.coherence) + (to01(Bx.persuasiveness) * w.persuasiveness) + (to01(Bx.rebuttal_efficiency) * w.rebuttal_efficiency) + (to01(Bx.final_position) * w.final_position)
+        const fallacyPenaltyA = (10 - faA) / 10 * 0.06
+        const fallacyPenaltyB = (10 - faB) / 10 * 0.06
+        const sumA = (to01(Ax.argument_strength) * w.argument_strength)
+          + (to01(Ax.factual_accuracy) * w.factual_accuracy)
+          + (to01(Ax.direct_response) * w.direct_response)
+          + (to01(Ax.rebuttal_efficiency) * w.rebuttal_efficiency)
+          + (to01(Ax.persuasiveness) * w.persuasiveness)
+          + (to01(Ax.final_position) * w.final_position)
+        const sumB = (to01(Bx.argument_strength) * w.argument_strength)
+          + (to01(Bx.factual_accuracy) * w.factual_accuracy)
+          + (to01(Bx.direct_response) * w.direct_response)
+          + (to01(Bx.rebuttal_efficiency) * w.rebuttal_efficiency)
+          + (to01(Bx.persuasiveness) * w.persuasiveness)
+          + (to01(Bx.final_position) * w.final_position)
         a = Math.max(0, Math.min(1, sumA - fallacyPenaltyA))
         b = Math.max(0, Math.min(1, sumB - fallacyPenaltyB))
       }
@@ -37,8 +54,17 @@ export async function judgeDebate(topic: string, aText: string, bText: string) {
 }
 
 export async function aggregateJudgeScores(scores: JudgeScore[]) {
-  const a = scores.reduce((s, v) => s + v.agentAScore, 0) / scores.length
-  const b = scores.reduce((s, v) => s + v.agentBScore, 0) / scores.length
+  const aArr = scores.map(s => s.agentAScore).slice().sort((x, y) => x - y)
+  const bArr = scores.map(s => s.agentBScore).slice().sort((x, y) => x - y)
+  function trimmedMean(arr: number[]) {
+    if (arr.length >= 4) {
+      const trimmed = arr.slice(1, arr.length - 1)
+      return trimmed.reduce((s, v) => s + v, 0) / trimmed.length
+    }
+    return arr.reduce((s, v) => s + v, 0) / arr.length
+  }
+  const a = trimmedMean(aArr)
+  const b = trimmedMean(bArr)
   return { a, b }
 }
 

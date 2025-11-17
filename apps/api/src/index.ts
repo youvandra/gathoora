@@ -181,11 +181,13 @@ app.post('/matches', async (req: Request, res: Response) => {
   const j1 = await judgeDebate(topic, entries.filter(e => e.agentId === agentA.id).map(e => e.text).join('\n'), entries.filter(e => e.agentId === agentB.id).map(e => e.text).join('\n'))
   const j2 = await judgeDebate(topic, entries.filter(e => e.agentId === agentA.id).map(e => e.text).join('\n'), entries.filter(e => e.agentId === agentB.id).map(e => e.text).join('\n'))
   const j3 = await judgeDebate(topic, entries.filter(e => e.agentId === agentA.id).map(e => e.text).join('\n'), entries.filter(e => e.agentId === agentB.id).map(e => e.text).join('\n'))
+  const j4 = await judgeDebate(topic, entries.filter(e => e.agentId === agentA.id).map(e => e.text).join('\n'), entries.filter(e => e.agentId === agentB.id).map(e => e.text).join('\n'))
 
   const judgeScores = [
     { judgeId: 'judge-1', agentAScore: j1.agentAScore, agentBScore: j1.agentBScore },
     { judgeId: 'judge-2', agentAScore: j2.agentAScore, agentBScore: j2.agentBScore },
-    { judgeId: 'judge-3', agentAScore: j3.agentAScore, agentBScore: j3.agentBScore }
+    { judgeId: 'judge-3', agentAScore: j3.agentAScore, agentBScore: j3.agentBScore },
+    { judgeId: 'judge-4', agentAScore: j4.agentAScore, agentBScore: j4.agentBScore }
   ]
 
   const agg = await aggregateJudgeScores(judgeScores)
@@ -545,10 +547,12 @@ app.post('/arenas/start', async (req: Request, res: Response) => {
     const j1 = await judgeDebate(a.topic, aAll, bAll)
     const j2 = await judgeDebate(a.topic, aAll, bAll)
     const j3 = await judgeDebate(a.topic, aAll, bAll)
+    const j4 = await judgeDebate(a.topic, aAll, bAll)
     const judgeScores = [
       { judgeId: 'judge-1', agentAScore: j1.agentAScore, agentBScore: j1.agentBScore },
       { judgeId: 'judge-2', agentAScore: j2.agentAScore, agentBScore: j2.agentBScore },
-      { judgeId: 'judge-3', agentAScore: j3.agentAScore, agentBScore: j3.agentBScore }
+      { judgeId: 'judge-3', agentAScore: j3.agentAScore, agentBScore: j3.agentBScore },
+      { judgeId: 'judge-4', agentAScore: j4.agentAScore, agentBScore: j4.agentBScore }
     ]
     const agg = await aggregateJudgeScores(judgeScores)
     const winnerAgentId = agg.a === agg.b ? undefined : (agg.a > agg.b ? kpA.id : kpB.id)
@@ -674,10 +678,12 @@ app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
     const j1 = await judgeDebate(a.topic, aAll, bAll)
     const j2 = await judgeDebate(a.topic, aAll, bAll)
     const j3 = await judgeDebate(a.topic, aAll, bAll)
+    const j4 = await judgeDebate(a.topic, aAll, bAll)
     const judgeScores = [
       { judgeId: 'judge-1', agentAScore: j1.agentAScore, agentBScore: j1.agentBScore },
       { judgeId: 'judge-2', agentAScore: j2.agentAScore, agentBScore: j2.agentBScore },
-      { judgeId: 'judge-3', agentAScore: j3.agentAScore, agentBScore: j3.agentBScore }
+      { judgeId: 'judge-3', agentAScore: j3.agentAScore, agentBScore: j3.agentBScore },
+      { judgeId: 'judge-4', agentAScore: j4.agentAScore, agentBScore: j4.agentBScore }
     ]
     const agg = await aggregateJudgeScores(judgeScores)
     const winnerAgentId = agg.a === agg.b ? undefined : (agg.a > agg.b ? kpA.id : kpB.id)
