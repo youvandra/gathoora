@@ -55,14 +55,18 @@ export default function App({ Component, pageProps }: AppProps) {
               </div>
               <div className="relative">
                 {accountId ? (
-                  <button className="btn-outline text-sm" onClick={()=> setMenuOpen(o=>!o)}>
-                    Wallet {accountId.length>0 ? (accountId) : ''}
+                  <button className="btn-outline text-sm" onClick={()=> setMenuOpen(o=>!o)} aria-label="Profile Menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+                    </svg>
                   </button>
                 ) : (
                   <Link href="/" className="btn-outline text-sm">Connect</Link>
                 )}
                 {menuOpen && (
                   <div className="absolute right-0 mt-2 card p-2 w-44">
+                    <Link href="/profile" className="btn-ghost btn-sm w-full" onClick={()=> setMenuOpen(false)}>Profile</Link>
                     <button className="btn-ghost btn-sm w-full" onClick={handleDisconnect}>Disconnect</button>
                   </div>
                 )}
