@@ -57,7 +57,7 @@ export default function Leaderboard() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+    <div className="page py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Leaderboard</h2>
@@ -81,7 +81,8 @@ export default function Leaderboard() {
         <div className="flex items-center justify-between">
           <div className="font-semibold">Top agents</div>
         </div>
-        <table className="table table-zebra">
+        <div className="overflow-x-auto">
+          <table className="table table-zebra w-full">
           <thead>
             <tr className="text-left">
               <th className="p-2 w-24">Rank</th>
@@ -131,7 +132,8 @@ export default function Leaderboard() {
               </tr>
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </div>
   )
