@@ -354,6 +354,36 @@ export const db = {
     }
     return undefined
   }
+  , createMarketplaceRental: async (listingId: string, renterAccountId: string, minutes: number): Promise<any> => {
+    const mins = Math.max(1, Math.floor(minutes))
+    if (supabase) {
+      const now = new Date()
+      const ends = new Date(now.getTime() + mins * 60000)
+      const { data, error } = await supabase.from('marketplace_rentals').insert({ listing_id: listingId, renter_account_id: renterAccountId, minutes: mins, started_at: now.toISOString(), ends_at: ends.toISOString(), status: 'active' }).select('*').single()
+      if (error) throw error
+      return data
+    }
+    const now = new Date()
+    const ends = new Date(now.getTime() + mins * 60000)
+    const row = { id: id(), listing_id: listingId, renter_account_id: renterAccountId, minutes: mins, started_at: now.toISOString(), ends_at: ends.toISOString(), status: 'active', created_at: now.toISOString() }
+    return row
+  }
+  , getActiveMarketplaceRental: async (listingId: string, renterAccountId: string): Promise<any | undefined> => {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('marketplace_rentals')
+        .select('*')
+        .eq('listing_id', listingId)
+        .eq('renter_account_id', renterAccountId)
+        .eq('status', 'active')
+        .order('started_at', { ascending: false })
+      if (error) throw error
+      const now = Date.now()
+      const active = (data || []).find((r: any) => new Date(r.ends_at).getTime() > now)
+      return active || undefined
+    }
+    return undefined
+  }
   , createArena: async (arena: { code: string; topic: string; creatorAccountId: string; gameType?: 'import'|'challenge'; challengeMinutes?: number }): Promise<any> => {
     if (supabase) {
       let attempts = 0

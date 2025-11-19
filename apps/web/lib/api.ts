@@ -22,17 +22,32 @@ export async function createMarketplaceListing(knowledgePackId: string, ownerAcc
   return data
 }
 
-export async function chatMarketplace(listingId: string, messages: { role: 'user'|'assistant', content: string }[]) {
+export async function chatMarketplace(listingId: string, accountId: string, messages: { role: 'user'|'assistant', content: string }[]) {
   const r = await fetch(`${API_URL}/marketplace/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ listingId, messages })
+    body: JSON.stringify({ listingId, accountId, messages })
   })
   return r.json()
 }
 
 export async function getMarketplaceListing(id: string) {
   const r = await fetch(`${API_URL}/marketplace/listings/${encodeURIComponent(id)}`)
+  return r.json()
+}
+
+export async function getMarketplaceRentalStatus(listingId: string, accountId: string) {
+  const url = `${API_URL}/marketplace/rental-status?listingId=${encodeURIComponent(listingId)}&accountId=${encodeURIComponent(accountId)}`
+  const r = await fetch(url)
+  return r.json()
+}
+
+export async function rentMarketplace(listingId: string, renterAccountId: string, minutes: number) {
+  const r = await fetch(`${API_URL}/marketplace/rent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ listingId, renterAccountId, minutes })
+  })
   return r.json()
 }
 

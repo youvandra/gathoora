@@ -220,15 +220,45 @@ app.get('/marketplace/listings/:id', async (req: Request, res: Response) => {
   res.json(row)
 })
 
+app.get('/marketplace/rental-status', async (req: Request, res: Response) => {
+  const listingId = String(req.query.listingId || '')
+  const accountId = String(req.query.accountId || '')
+  if (!listingId || !accountId) return res.status(400).json({ error: 'Missing params' })
+  const r = await db.getActiveMarketplaceRental(listingId, accountId)
+  res.json({ active: !!r, rental: r || null })
+})
+
+app.post('/marketplace/rent', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ listingId: z.string(), renterAccountId: z.string(), minutes: z.number().int().positive() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const listing = await db.getMarketplaceListing(parsed.data.listingId)
+    if (!listing) return res.status(404).json({ error: 'Listing not found' })
+    if (String(listing.owner_account_id) === String(parsed.data.renterAccountId)) return res.status(400).json({ error: 'Owner cannot rent own listing' })
+    const existing = await db.getActiveMarketplaceRental(parsed.data.listingId, parsed.data.renterAccountId)
+    if (existing) return res.status(400).json({ error: 'Already rented and active' })
+    const rental = await db.createMarketplaceRental(parsed.data.listingId, parsed.data.renterAccountId, parsed.data.minutes)
+    res.json(rental)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.post('/marketplace/chat', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ listingId: z.string(), messages: z.array(z.object({ role: z.string(), content: z.string() })) })
+    const schema = z.object({ listingId: z.string(), accountId: z.string(), messages: z.array(z.object({ role: z.string(), content: z.string() })) })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const listing = await db.getMarketplaceListing(parsed.data.listingId)
     if (!listing) return res.status(404).json({ error: 'Listing not found' })
     const kp = await db.getKnowledgePack(String(listing.knowledge_pack_id))
     if (!kp) return res.status(404).json({ error: 'Knowledge not found' })
+    const isOwner = String(listing.owner_account_id) === String(parsed.data.accountId)
+    if (!isOwner) {
+      const rented = await db.getActiveMarketplaceRental(parsed.data.listingId, parsed.data.accountId)
+      if (!rented) return res.status(403).json({ error: 'Rental required before chat' })
+    }
     const system = `You are a strictly scoped assistant. You MUST answer using ONLY the content provided under 'Knowledge'. If the answer is not directly supported by that content, reply exactly: "I don't know based on the provided knowledge." Do not use external information. Do not speculate. Quote or paraphrase only from 'Knowledge'.`
     const agg = kp.content
     const userLast = parsed.data.messages.slice().reverse().find(m => m.role === 'user')?.content || ''
