@@ -42,6 +42,18 @@ export default function Marketplace() {
     })()
   }, [listings, accountId])
   function onUse(l: any) {
+    try {
+      if (typeof window !== 'undefined' && accountId) {
+        const key = `playground_sources:${accountId}`
+        const raw = localStorage.getItem(key) || ''
+        const parsed = raw ? JSON.parse(raw) : {}
+        const rentedSaved: { id: string, title?: string }[] = Array.isArray(parsed?.rentedSaved) ? parsed.rentedSaved : []
+        const title = String(l?.title || l?.knowledge_pack_id || 'Untitled Knowledge')
+        if (!rentedSaved.some(x => x.id === l.id)) rentedSaved.push({ id: l.id, title })
+        const payload = { ownedSaved: Array.isArray(parsed?.ownedSaved) ? parsed.ownedSaved : [], rentedSaved }
+        localStorage.setItem(key, JSON.stringify(payload))
+      }
+    } catch {}
     window.location.href = `/playground?listing=${encodeURIComponent(l.id)}`
   }
   function onRent(l: any) {

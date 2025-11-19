@@ -44,6 +44,58 @@ export default function Playground() {
   }, [accountId])
 
   useEffect(() => {
+    if (!accountId) return
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(`playground_sources:${accountId}`) || '' : ''
+      const parsed = raw ? JSON.parse(raw) : null
+      const ownedSaved: { id: string, title?: string }[] = Array.isArray(parsed?.ownedSaved) ? parsed.ownedSaved : []
+      const rentedSaved: { id: string, title?: string }[] = Array.isArray(parsed?.rentedSaved) ? parsed.rentedSaved : []
+      const ownedIdsFallback: string[] = Array.isArray(parsed?.owned) ? parsed.owned : []
+      const rentedIdsFallback: string[] = Array.isArray(parsed?.rented) ? parsed.rented : []
+      const ownedToRestore: { id: string, title?: string }[] = ownedSaved.length ? ownedSaved : ownedIdsFallback.map(id => ({ id }))
+      const rentedToRestore: { id: string, title?: string }[] = rentedSaved.length ? rentedSaved : rentedIdsFallback.map(id => ({ id }))
+      // Restore owned selections immediately using saved titles (fallback to pack title when available)
+      if (ownedToRestore.length) {
+        ownedToRestore.forEach(({ id, title }) => {
+          const k = owned.find(o => o.id === id)
+          const t = title || k?.title || 'Untitled Knowledge'
+          setSelOwned(ids => ids.includes(id) ? ids : [...ids, id])
+          setSelTitles(ts => ts.some(x => x.type==='owned' && x.id===id) ? ts : [...ts, { type: 'owned', id, title: t }])
+        })
+      }
+      // Restore rented selections only if still allowed (owner, active rental, or free)
+      if (rentedToRestore.length) {
+        (async () => {
+          for (const item of rentedToRestore) {
+            const lid = item.id
+            try {
+              const l = await getMarketplaceListing(lid)
+              const isOwner = String(l?.owner_account_id || '') === String(accountId)
+              if (!isOwner) {
+                const status = await getMarketplaceRentalStatus(lid, accountId)
+                if (!status?.active && Number(l?.price || 0) > 0) continue
+              }
+              setSelRented(ids => ids.includes(lid) ? ids : [...ids, lid])
+              const t = item.title || String(l?.title || l?.knowledge_pack_id || 'Untitled Knowledge')
+              setSelTitles(ts => ts.some(x => x.type==='rented' && x.id===lid) ? ts : [...ts, { type: 'rented', id: lid, title: t }])
+            } catch {}
+          }
+        })()
+      }
+    } catch {}
+  }, [accountId, owned])
+
+  useEffect(() => {
+    if (!accountId) return
+    try {
+      const ownedSaved = selTitles.filter(s => s.type==='owned').map(s => ({ id: s.id, title: s.title }))
+      const rentedSaved = selTitles.filter(s => s.type==='rented').map(s => ({ id: s.id, title: s.title }))
+      const payload = { ownedSaved, rentedSaved }
+      if (typeof window !== 'undefined') localStorage.setItem(`playground_sources:${accountId}`, JSON.stringify(payload))
+    } catch {}
+  }, [accountId, selTitles])
+
+  useEffect(() => {
     const parts = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
     const listing = parts?.get('listing') || ''
     if (!listing || !accountId) return
