@@ -17,7 +17,7 @@
   .btn-primary { @apply btn bg-brand-coral text-white hover:bg-brand-brown; }
   .btn-secondary { @apply btn bg-brand-yellow text-brand-cocoa hover:bg-brand-peach; }
   .btn-outline { @apply btn border border-brand-brown text-brand-brown bg-white hover:bg-brand-cream; }
-  .btn-danger { @apply btn bg-brand-coral text-white hover:bg-brand-brown; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
   .btn-sm { @apply px-3 py-1 text-sm; }
   .btn-lg { @apply px-6 py-3 text-lg; }
   .btn-ghost { @apply btn bg-transparent text-brand-brown hover:bg-brand-cream border border-transparent; }

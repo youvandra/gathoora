@@ -707,8 +707,8 @@ app.post('/arenas/submit-knowledge', async (req: Request, res: Response) => {
     const field = parsed.data.side === 'pros' ? 'agent_a_id' : 'agent_b_id'
     if (a[field]) return res.status(400).json({ error: 'Agent already set' })
     const title = `Arena ${a.id} ${parsed.data.side} knowledge`
-    const kp = await db.createKnowledgePack(title, parsed.data.content)
     const owningAccount = parsed.data.accountId
+    const kp = await db.createKnowledgePack(title, parsed.data.content, owningAccount)
     const ag = await db.createAgent(parsed.data.agentName, kp.id, owningAccount, 'challenge')
     const submittedField = parsed.data.side === 'pros' ? 'creator_knowledge_submitted' : 'joiner_knowledge_submitted'
     const statusField = parsed.data.side === 'pros' ? 'creator_writing_status' : 'joiner_writing_status'

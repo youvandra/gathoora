@@ -74,7 +74,14 @@ export const db = {
         const uniq = new Map<string, any>()
         for (const p of packs) uniq.set(p.id, p)
         const list = Array.from(uniq.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        return list.map((d: any) => ({ id: d.id, title: d.title, content: d.content, createdAt: new Date(d.created_at).getTime(), ownerAccountId: d.owner_account_id || undefined, listed: !!d.listed }))
+        return list.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          content: d.content,
+          createdAt: new Date(d.created_at).getTime(),
+          ownerAccountId: (d.owner_account_id ? d.owner_account_id : (String(d.title||'').toLowerCase().startsWith('arena ') ? accountId : undefined)) || undefined,
+          listed: !!d.listed
+        }))
       } else {
         const { data, error } = await supabase.from('knowledge_packs').select('*').order('created_at', { ascending: false })
         if (error) throw error

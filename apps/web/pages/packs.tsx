@@ -72,7 +72,7 @@ export default function Packs() {
               <thead>
                 <tr className="text-left">
                   <th className="p-2 font-semibold w-1/2">Title</th>
-                  <th className="p-2 font-semibold text-right w-48">Created</th>
+                  <th className="p-2 font-semibold text-left w-48">Created</th>
                   <th className="p-2 font-semibold w-52">Actions</th>
                 </tr>
               </thead>
@@ -96,14 +96,14 @@ export default function Packs() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-2 w-48 text-sm text-right font-mono whitespace-nowrap text-brand-brown/60">{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
+                    <td className="p-2 w-48 text-sm text-left font-mono whitespace-nowrap text-brand-brown/60">{p.createdAt ? (()=>{ const dt=new Date(p.createdAt); const dd=String(dt.getDate()).padStart(2,'0'); const mm=String(dt.getMonth()+1).padStart(2,'0'); const yyyy=dt.getFullYear(); return `${dd}/${mm}/${yyyy}`; })() : '-'}</td>
                     <td className="p-2">
                       <div className="flex items-center gap-1">
                         <button className="btn-ghost btn-sm btn-compact" onClick={()=> setModal({ type: 'viewPack', id: p.id })}>View</button>
                         {String(p.title || '').toLowerCase().startsWith('arena ') ? (
-                          <span className="badge badge-muted">Locked</span>
+                          <span className="badge badge-muted inline-flex justify-center w-24">Locked</span>
                         ) : (
-                          <button className="btn-ghost btn-sm btn-compact" onClick={()=>{ setEditingPackId(p.id); setEditingPackTitle(p.title); setEditingPackContent(p.content); setModal({ type: 'editPack', id: p.id }) }}>Edit</button>
+                          <button className="btn-ghost btn-sm btn-compact w-24 justify-center" onClick={()=>{ setEditingPackId(p.id); setEditingPackTitle(p.title); setEditingPackContent(p.content); setModal({ type: 'editPack', id: p.id }) }}>Edit</button>
                         )}
                         {(() => {
                           const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''

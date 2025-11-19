@@ -11,6 +11,13 @@ export default function Marketplace() {
   useEffect(() => {
     listMarketplaceListings().then(setListings).catch(()=>{})
   }, [])
+  function formatDate(val: any) {
+    const dt = new Date(val)
+    const dd = String(dt.getDate()).padStart(2, '0')
+    const mm = String(dt.getMonth() + 1).padStart(2, '0')
+    const yyyy = dt.getFullYear()
+    return `${dd}/${mm}/${yyyy}`
+  }
   async function onChat(l: any) {
     const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
     if (!accId) { setRentError('Missing account'); setRentId(l.id); setMinutes(''); return }
@@ -50,7 +57,7 @@ export default function Marketplace() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-semibold" title={l.title || l.knowledge_pack_id}>{l.title || 'Untitled Knowledge'}</div>
-                <div className="text-xs text-brand-brown/60">Owner <span className="font-mono">{l.owner_account_id}</span> • {new Date(l.created_at).toLocaleString()}</div>
+                <div className="text-xs text-brand-brown/60">Owner <span className="font-mono">{l.owner_account_id}</span> • {formatDate(l.created_at)}</div>
               </div>
               <button className="btn-primary" onClick={()=>onChat(l)}>Rent</button>
             </div>
