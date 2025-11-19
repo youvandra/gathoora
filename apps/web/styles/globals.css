@@ -43,7 +43,7 @@
   .table-zebra tbody tr:nth-child(even) { @apply bg-brand-cream/60; }
   .table tbody tr:hover { @apply bg-brand-cream/70; }
   .modal-backdrop { @apply fixed inset-0 w-screen h-screen bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000]; }
-  .modal-card { @apply card-lg max-w-xl w-full; }
+  .modal-card { @apply card-lg max-w-6xl w-full h-[85vh] overflow-y-auto; }
   .toast-stack { @apply fixed bottom-4 right-4 z-50 space-y-2; }
   .toast { @apply card px-4 py-2 shadow-soft; }
   .toast-success { @apply toast border-green-200; }

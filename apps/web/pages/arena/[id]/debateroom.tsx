@@ -19,6 +19,8 @@ export default function ArenaDebateRoom() {
   const [revealProgress, setRevealProgress] = useState(0)
   const revealTimerRef = useRef<any>(null)
   const [revealing, setRevealing] = useState(false)
+  const [showRoundModal, setShowRoundModal] = useState(false)
+  const roundAreaRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -38,6 +40,12 @@ export default function ArenaDebateRoom() {
 
   async function startReplay(round?: string) {
     if (!arena?.match_id) return
+    if (round) {
+      setShowRoundModal(true)
+    } else if (roundAreaRef.current) {
+      const top = roundAreaRef.current.getBoundingClientRect().top + window.scrollY - 16
+      window.scrollTo({ top, behavior: 'smooth' })
+    }
     const m = await getMatch(arena.match_id)
     const order = round ? [round] : ['opening','direct_arguments','rebuttals','counter_rebuttals','question_crossfire','answer_crossfire','final_arguments']
     setReplayPros('')
@@ -139,6 +147,51 @@ export default function ArenaDebateRoom() {
           {match && (
             <>
             <div className="card p-4">
+              <div className="font-semibold">Conclusion</div>
+              <div className="mt-2 space-y-2">
+                <div className="text-sm">{match.judgeConclusion || '-'}</div>
+                {(() => {
+                  const txt = String(match.judgeConclusion||'')
+                  const parts = txt.split(/[\.\n]+/).map(s=>s.trim()).filter(Boolean)
+                  return parts.length>1 ? (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {parts.map((p, i)=>(<li key={i}>{p}</li>))}
+                    </ul>
+                  ) : null
+                })()}
+              </div>
+            </div>
+            </>
+          )}
+          {arena.status === 'matching' ? (
+            <div className="card p-4">Agent still debate</div>
+          ) : (
+            <div className="space-y-3" ref={roundAreaRef}>
+              <div className="card p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('opening')} disabled={!arena?.match_id}>Opening</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('direct_arguments')} disabled={!arena?.match_id}>Direct Arguments</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('rebuttals')} disabled={!arena?.match_id}>Rebuttals</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('counter_rebuttals')} disabled={!arena?.match_id}>Counter Rebuttals</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('question_crossfire')} disabled={!arena?.match_id}>(Question) Crossfire</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('answer_crossfire')} disabled={!arena?.match_id}>(Answer) Crossfire</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('final_arguments')} disabled={!arena?.match_id}>Final Arguments</button>
+                {false}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm">Round</div>
+                    <span className="badge bg-white border text-brand-brown/80">{labelRound(currentRound) || '-'}</span>
+                  </div>
+                  <div className="w-48 h-2 bg-brand-brown/10 rounded">
+                    <div className="h-2 bg-brand-blue rounded" style={{ width: `${replayPct}%` }}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {match && (
+            <div className="card p-4">
               {!showScores ? (
                 <div className="flex items-center justify-between">
                   <div className="font-semibold">Winner & Scores</div>
@@ -200,69 +253,17 @@ export default function ArenaDebateRoom() {
                 </div>
               )}
             </div>
-            <div className="card p-4">
-              <div className="font-semibold">Conclusion</div>
-              <div className="mt-2 space-y-2">
-                <div className="text-sm">{match.judgeConclusion || '-'}</div>
-                {(() => {
-                  const txt = String(match.judgeConclusion||'')
-                  const parts = txt.split(/[\.\n]+/).map(s=>s.trim()).filter(Boolean)
-                  return parts.length>1 ? (
-                    <ul className="list-disc pl-5 space-y-1 text-sm">
-                      {parts.map((p, i)=>(<li key={i}>{p}</li>))}
-                    </ul>
-                  ) : null
-                })()}
-              </div>
-            </div>
-            </>
-          )}
-          {arena.status === 'matching' ? (
-            <div className="card p-4">Agent still debate</div>
-          ) : (
-            <div className="space-y-3">
-              <div className="card p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay()} disabled={!arena?.match_id}>All</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('opening')} disabled={!arena?.match_id}>Opening</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('direct_arguments')} disabled={!arena?.match_id}>Direct Arguments</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('rebuttals')} disabled={!arena?.match_id}>Rebuttals</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('counter_rebuttals')} disabled={!arena?.match_id}>Counter Rebuttals</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('question_crossfire')} disabled={!arena?.match_id}>(Question) Crossfire</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('answer_crossfire')} disabled={!arena?.match_id}>(Answer) Crossfire</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('final_arguments')} disabled={!arena?.match_id}>Final Arguments</button>
-                {false}
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm">Round</div>
-                    <span className="badge bg-white border text-brand-brown/80">{labelRound(currentRound) || '-'}</span>
-                  </div>
-                  <div className="w-48 h-2 bg-brand-brown/10 rounded">
-                    <div className="h-2 bg-brand-blue rounded" style={{ width: `${replayPct}%` }}></div>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="card p-4">
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm font-semibold">Pros</div>
-                    <span className="badge bg-green-100 text-green-800">A</span>
-                  </div>
-                  <div className="mt-2 whitespace-pre-wrap">{replayPros}</div>
-                </div>
-                <div className="card p-4">
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm font-semibold">Cons</div>
-                    <span className="badge bg-rose-100 text-rose-800">B</span>
-                  </div>
-                  <div className="mt-2 whitespace-pre-wrap">{replayCons}</div>
-                </div>
-              </div>
-            </div>
           )}
         </div>
       )}
+      <RoundModal
+        open={showRoundModal}
+        onClose={() => { setShowRoundModal(false); stopReplay() }}
+        roundLabel={labelRound(currentRound)}
+        prosText={replayPros}
+        consText={replayCons}
+        progress={replayPct}
+      />
     </div>
   )
 }
@@ -288,4 +289,41 @@ function labelRound(r: string) {
   if (r === 'answer_crossfire') return '(Answer) Crossfire'
   if (r === 'final_arguments') return 'Final Arguments'
   return r
+}
+
+// Round Modal
+// Show pros/cons statements for the selected round in a modal for better UX
+export function RoundModal({ open, onClose, roundLabel, prosText, consText, progress }: { open: boolean; onClose: () => void; roundLabel: string; prosText: string; consText: string; progress: number }) {
+  if (!open) return null
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="font-semibold">{roundLabel || '-'}</div>
+          <button className="btn-outline btn-sm" onClick={onClose}>Close</button>
+        </div>
+        <div className="mt-3 flex items-center justify-end">
+          <div className="w-48 h-2 bg-brand-brown/10 rounded">
+            <div className="h-2 bg-brand-blue rounded" style={{ width: `${progress}%` }}></div>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="card p-4">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold">Pros</div>
+              <span className="badge bg-green-100 text-green-800">A</span>
+            </div>
+            <div className="mt-2 whitespace-pre-wrap">{prosText}</div>
+          </div>
+          <div className="card p-4">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold">Cons</div>
+              <span className="badge bg-rose-100 text-rose-800">B</span>
+            </div>
+            <div className="mt-2 whitespace-pre-wrap">{consText}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
