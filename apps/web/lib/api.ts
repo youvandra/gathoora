@@ -45,6 +45,11 @@ export async function getMarketplaceListing(id: string) {
   return r.json()
 }
 
+export async function getMarketplaceListingByPackId(packId: string) {
+  const r = await fetch(`${API_URL}/marketplace/listings/by-pack/${encodeURIComponent(packId)}`)
+  return r.json()
+}
+
 export async function getMarketplaceRentalStatus(listingId: string, accountId: string) {
   const url = `${API_URL}/marketplace/rental-status?listingId=${encodeURIComponent(listingId)}&accountId=${encodeURIComponent(accountId)}`
   const r = await fetch(url)
@@ -56,6 +61,15 @@ export async function rentMarketplace(listingId: string, renterAccountId: string
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ listingId, renterAccountId, minutes })
+  })
+  return r.json()
+}
+
+export async function updateMarketplaceListingPrice(knowledgePackId: string, ownerAccountId: string, price: number) {
+  const r = await fetch(`${API_URL}/marketplace/listings/update-price`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ knowledgePackId, ownerAccountId, price })
   })
   return r.json()
 }

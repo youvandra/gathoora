@@ -284,6 +284,31 @@ app.get('/marketplace/listings/:id', async (req: Request, res: Response) => {
   res.json(row)
 })
 
+app.get('/marketplace/listings/by-pack/:packId', async (req: Request, res: Response) => {
+  try {
+    const row = await db.getMarketplaceListingByPackId(req.params.packId)
+    if (!row) return res.status(404).json({ error: 'Not found' })
+    res.json(row)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.post('/marketplace/listings/update-price', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().int().nonnegative() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const listing = await db.getMarketplaceListingByPackId(parsed.data.knowledgePackId)
+    if (!listing) return res.status(404).json({ error: 'Listing not found' })
+    if (String(listing.owner_account_id) !== String(parsed.data.ownerAccountId)) return res.status(403).json({ error: 'Forbidden' })
+    const updated = await db.updateMarketplaceListingPrice(parsed.data.knowledgePackId, parsed.data.price)
+    res.json(updated)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.post('/marketplace/unlist', async (req: Request, res: Response) => {
   try {
     const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string() })

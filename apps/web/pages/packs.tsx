@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listKnowledgePacks, createKnowledgePack, updateKnowledgePack, listAgents, createAgent, updateAgent, addAgentKnowledge, removeAgentKnowledge, createMarketplaceListing, unlistMarketplaceListing } from '../lib/api'
+import { listKnowledgePacks, createKnowledgePack, updateKnowledgePack, listAgents, createAgent, updateAgent, addAgentKnowledge, removeAgentKnowledge, createMarketplaceListing, unlistMarketplaceListing, getMarketplaceListingByPackId, updateMarketplaceListingPrice } from '../lib/api'
 
 export default function Packs() {
   const [kpTitle, setKpTitle] = useState('')
@@ -108,7 +108,14 @@ export default function Packs() {
                           const isOwner = String(p.ownerAccountId || '') === acc
                           return isOwner ? (
                             p.listed ? (
-                              <button className="btn-outline btn-sm btn-compact" onClick={()=>{ setModal({ type: 'unlistConfirm', id: p.id }) }}>Unrent</button>
+                              <button className="btn-outline btn-sm btn-compact" onClick={async ()=>{
+                                try {
+                                  const listing = await getMarketplaceListingByPackId(p.id)
+                                  const current = Number(listing?.price || 0)
+                                  setListPrice(String(current))
+                                } catch { setListPrice('0') }
+                                setModal({ type: 'updateListing', id: p.id })
+                              }}>Update</button>
                             ) : (
                               <button className="btn-primary btn-sm btn-compact" onClick={()=>{ setModal({ type: 'listPack', id: p.id }); setListPrice('0') }}>Rent</button>
                             )
@@ -300,6 +307,47 @@ export default function Packs() {
                       }
                     } catch (e: any) { pushToast('error', e?.message || 'Listing failed') }
                   }}>List</button>
+                </div>
+              </div>
+            )}
+            {modal?.type === 'updateListing' && modal.id && (
+              <div className="space-y-3">
+                <div className="font-semibold">Update Listing</div>
+                <label className="text-sm">Rent Price</label>
+                <input className="input" type="number" min={0} value={listPrice} onChange={e=> setListPrice(e.target.value)} />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <button className="btn-danger" onClick={async ()=>{
+                      try {
+                        const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+                        const r = await unlistMarketplaceListing(String(modal.id), accId)
+                        if (r && !r.error) {
+                          setPacks(prev => prev.map(x => x.id === modal.id ? { ...x, listed: false } : x))
+                          setModal(null)
+                          pushToast('success','Unlisted from marketplace')
+                        } else {
+                          pushToast('error', r?.error || 'Unlist failed')
+                        }
+                      } catch (e: any) { pushToast('error', e?.message || 'Unlist failed') }
+                    }}>Unrent</button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn-outline" onClick={()=> { setModal(null); setListPrice('') }}>Cancel</button>
+                    <button className="btn-primary" onClick={async ()=>{
+                      try {
+                        const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+                        const priceNum = Math.max(0, parseInt(listPrice || '0', 10))
+                        const r = await updateMarketplaceListingPrice(String(modal.id), accId, priceNum)
+                        if (r && !r.error) {
+                          setModal(null)
+                          setListPrice('')
+                          pushToast('success','Listing updated')
+                        } else {
+                          pushToast('error', r?.error || 'Update failed')
+                        }
+                      } catch (e: any) { pushToast('error', e?.message || 'Update failed') }
+                    }}>Save</button>
+                  </div>
                 </div>
               </div>
             )}

@@ -374,6 +374,19 @@ export const db = {
     }
     return undefined
   }
+  , updateMarketplaceListingPrice: async (knowledgePackId: string, price: number): Promise<any | undefined> => {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('marketplace_listings')
+        .update({ price })
+        .eq('knowledge_pack_id', knowledgePackId)
+        .select('*')
+        .maybeSingle()
+      if (error) throw error
+      return data || undefined
+    }
+    return undefined
+  }
   , unlistMarketplaceListing: async (knowledgePackId: string): Promise<boolean> => {
     if (supabase) {
       const { data } = await supabase.from('marketplace_listings').select('id').eq('knowledge_pack_id', knowledgePackId)
