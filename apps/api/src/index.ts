@@ -15,6 +15,25 @@ app.use(cors())
 app.use(express.json({ limit: '1mb' }))
 const generating = new Set<string>()
 
+async function publishEloMessage(info: { context: string; topic?: string; agentAId: string; agentBId: string; ownerA?: string; ownerB?: string; ratingA: number; ratingB: number; sa: number; sb: number; ra: number; rb: number; winnerAgentId?: string; matchId?: string; arenaId?: string }) {
+  try {
+    const sdk = await import('@hashgraph/sdk')
+    const { Client, AccountId, PrivateKey, TopicId, TopicMessageSubmitTransaction } = sdk as any
+    const hedNet = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+    const topicIdStr = String(process.env.HCS_ELO_TOPIC_ID || '0.0.7291514')
+    const operatorIdStr = String(process.env.COK_TREASURY_ACCOUNT_ID || '')
+    const operatorKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
+    if (!operatorIdStr || !operatorKeyStr || !topicIdStr) return
+    const client = hedNet === 'mainnet' ? Client.forMainnet() : Client.forTestnet()
+    const operatorId = AccountId.fromString(operatorIdStr)
+    const operatorKey = PrivateKey.fromStringECDSA(operatorKeyStr.startsWith('0x') ? operatorKeyStr.slice(2) : operatorKeyStr)
+    client.setOperator(operatorId, operatorKey)
+    const topicId = TopicId.fromString(topicIdStr)
+    const message = { type: 'elo_update', network: hedNet, timestamp: new Date().toISOString(), ...info }
+    await new TopicMessageSubmitTransaction().setTopicId(topicId).setMessage(Buffer.from(JSON.stringify(message))).execute(client)
+  } catch {}
+}
+
 function systemPrompt(name: string, r: RoundName) {
   if (r === 'opening') return `You are ${name}. Use only the provided knowledge. Present your stance clearly. Establish position in 3–5 short, well-ordered points or 1–2 compact paragraphs. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
   if (r === 'direct_arguments') return `You are ${name}. Use only the provided knowledge. Give your main argument: strongest points, evidence, and reasoning. Use structured numbered points or short paragraphs. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
@@ -1022,6 +1041,7 @@ app.post('/matches', async (req: Request, res: Response) => {
     const elo = calculateElo(ratingA, ratingB, sa, sb)
     await db.updateUserElo(ownerA, elo.ra)
     await db.updateUserElo(ownerB, elo.rb)
+    await publishEloMessage({ context: 'match_create', topic, agentAId: agentA.id, agentBId: agentB.id, ownerA, ownerB, ratingA, ratingB, sa, sb, ra: elo.ra, rb: elo.rb, winnerAgentId, matchId: match.id })
   }
 
   res.json(match)
@@ -1253,12 +1273,14 @@ app.post('/arenas/submit-knowledge', async (req: Request, res: Response) => {
     if (!a) return res.status(404).json({ error: 'Not found' })
     if (a.game_type !== 'challenge' || a.status !== 'challenge') return res.status(400).json({ error: 'Not in challenge mode' })
     if (!a.challenge_minutes) return res.status(400).json({ error: 'Challenge not configured' })
-    const isPros = parsed.data.side === 'pros'
-    const startedAt = isPros ? a.creator_writing_started_at : a.joiner_writing_started_at
+    const isCreator = String(a.creator_account_id) === String(parsed.data.accountId)
+    const isJoiner = String(a.joiner_account_id) === String(parsed.data.accountId)
+    if (!isCreator && !isJoiner) return res.status(403).json({ error: 'Forbidden' })
+    const startedAt = isCreator ? a.creator_writing_started_at : a.joiner_writing_started_at
     if (!startedAt) return res.status(400).json({ error: 'Not started' })
-    const pausedSecs = isPros ? (a.creator_paused_secs || 0) : (a.joiner_paused_secs || 0)
-    const writingStatus = parsed.data.side === 'pros' ? a.creator_writing_status : a.joiner_writing_status
-    const pausedAt = isPros ? a.creator_paused_at : a.joiner_paused_at
+    const pausedSecs = isCreator ? (a.creator_paused_secs || 0) : (a.joiner_paused_secs || 0)
+    const writingStatus = isCreator ? a.creator_writing_status : a.joiner_writing_status
+    const pausedAt = isCreator ? a.creator_paused_at : a.joiner_paused_at
     const nowTs = (writingStatus === 'paused' && pausedAt) ? new Date(pausedAt).getTime() : Date.now()
     const elapsedSecs = Math.floor((nowTs - new Date(startedAt).getTime()) / 1000) - pausedSecs
     if (elapsedSecs > a.challenge_minutes * 60) return res.status(400).json({ error: 'Time over' })
@@ -1269,11 +1291,11 @@ app.post('/arenas/submit-knowledge', async (req: Request, res: Response) => {
     const owningAccount = parsed.data.accountId
     const kp = await db.createKnowledgePack(title, parsed.data.content, owningAccount)
     const ag = await db.createAgent(parsed.data.agentName, kp.id, owningAccount, 'challenge')
-    const submittedField = parsed.data.side === 'pros' ? 'creator_knowledge_submitted' : 'joiner_knowledge_submitted'
-    const statusField = parsed.data.side === 'pros' ? 'creator_writing_status' : 'joiner_writing_status'
-    const pausedAtField = parsed.data.side === 'pros' ? 'creator_paused_at' : 'joiner_paused_at'
-    const draftTextField = parsed.data.side === 'pros' ? 'creator_draft_text' : 'joiner_draft_text'
-    const draftNameField = parsed.data.side === 'pros' ? 'creator_draft_agent_name' : 'joiner_draft_agent_name'
+    const submittedField = isCreator ? 'creator_knowledge_submitted' : 'joiner_knowledge_submitted'
+    const statusField = isCreator ? 'creator_writing_status' : 'joiner_writing_status'
+    const pausedAtField = isCreator ? 'creator_paused_at' : 'joiner_paused_at'
+    const draftTextField = isCreator ? 'creator_draft_text' : 'joiner_draft_text'
+    const draftNameField = isCreator ? 'creator_draft_agent_name' : 'joiner_draft_agent_name'
     const u = await db.updateArenaById(parsed.data.id, { [field]: ag.id, [submittedField]: true, [statusField]: 'finished', [pausedAtField]: null, [draftTextField]: null, [draftNameField]: null })
     res.json(u)
   } catch (e: any) {
@@ -1434,6 +1456,7 @@ app.post('/arenas/start', async (req: Request, res: Response) => {
       const elo = calculateElo(ratingA, ratingB, sa, sb)
       await db.updateUserElo(ownerA, elo.ra)
       await db.updateUserElo(ownerB, elo.rb)
+      await publishEloMessage({ context: 'challenge_finish', topic: a.topic, agentAId: kpA.id, agentBId: kpB.id, ownerA, ownerB, ratingA, ratingB, sa, sb, ra: elo.ra, rb: elo.rb, winnerAgentId, matchId: match.id, arenaId: a.id })
     }
     res.json({ arena: await db.getArenaById(parsed.data.id), match })
   } catch (e: any) {
@@ -1575,6 +1598,7 @@ app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
       const elo = calculateElo(ratingA, ratingB, sa, sb)
       await db.updateUserElo(ownerA, elo.ra)
       await db.updateUserElo(ownerB, elo.rb)
+      await publishEloMessage({ context: 'stream_generate', topic: a.topic, agentAId: kpA.id, agentBId: kpB.id, ownerA, ownerB, ratingA, ratingB, sa, sb, ra: elo.ra, rb: elo.rb, winnerAgentId, matchId: match.id, arenaId })
     }
     generating.delete(arenaId)
     send('scores', { judgeScores, aggregate: agg, winnerAgentId })

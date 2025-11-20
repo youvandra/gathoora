@@ -573,7 +573,12 @@ export const db = {
   }
   , updateUserElo: async (accountId: string, rating: number): Promise<void> => {
     if (supabase) {
-      await supabase.from('users').update({ elo_rating: rating }).eq('account_id', accountId)
+      const { data: existing } = await supabase.from('users').select('account_id').eq('account_id', accountId).maybeSingle()
+      if (existing) {
+        await supabase.from('users').update({ elo_rating: rating }).eq('account_id', accountId)
+      } else {
+        await supabase.from('users').insert({ account_id: accountId, elo_rating: rating })
+      }
       return
     }
   }
@@ -626,11 +631,21 @@ export const db = {
       const { data: users } = await supabase.from('users').select('account_id,name,elo_rating')
       const { data: agents } = await supabase.from('agents').select('owner_account_id')
       const countsMap = new Map<string, number>()
+      const ownersSet = new Set<string>()
       for (const row of (agents || [])) {
-        const owner = row.owner_account_id
-        if (owner) countsMap.set(owner, (countsMap.get(owner) || 0) + 1)
+        const owner = String(row.owner_account_id || '')
+        if (owner) {
+          countsMap.set(owner, (countsMap.get(owner) || 0) + 1)
+          ownersSet.add(owner)
+        }
       }
-      return (users || []).map((u: any) => ({ accountId: u.account_id, name: u.name, elo: u.elo_rating || 1000, agentCount: countsMap.get(u.account_id) || 0 }))
+      const userMap = new Map<string, any>()
+      for (const u of (users || [])) userMap.set(String(u.account_id), u)
+      const allOwners = Array.from(new Set([...ownersSet, ...Array.from(userMap.keys())]))
+      return allOwners.map((acct) => {
+        const u = userMap.get(acct)
+        return { accountId: acct, name: u?.name, elo: (u?.elo_rating ?? 1000), agentCount: countsMap.get(acct) || 0 }
+      })
     }
     return []
   }
