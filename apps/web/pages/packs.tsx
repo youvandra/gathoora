@@ -27,6 +27,8 @@ export default function Packs() {
   const [modal, setModal] = useState<{ type: string, id?: string } | null>(null)
   const [listPrice, setListPrice] = useState<string>('')
   const [listPriceUse, setListPriceUse] = useState<string>('')
+  const [listPriceInvalid, setListPriceInvalid] = useState<boolean>(false)
+  const [listPriceUseInvalid, setListPriceUseInvalid] = useState<boolean>(false)
   const [toasts, setToasts] = useState<{ id: string, kind: 'success'|'error', text: string }[]>([])
 
   function pushToast(kind: 'success'|'error', text: string) {
@@ -292,22 +294,44 @@ export default function Packs() {
               <div className="space-y-3">
                 <div className="font-semibold">List for Rent</div>
                 <label className="text-sm">Rent Price</label>
-                <input className="input" type="number" min={0} step="any" value={listPrice} onChange={e=> setListPrice(e.target.value)} />
+                <input className={`input ${listPriceInvalid ? 'border-red-500 focus:border-red-500' : ''}`} type="number" min={0} step={1} inputMode="numeric" value={listPrice} onChange={e=> {
+                  const v = e.target.value || ''
+                  if (v.includes('.')) {
+                    const iv = v.split('.')[0]
+                    setListPrice(iv)
+                    setListPriceInvalid(true)
+                  } else {
+                    setListPrice(v)
+                    setListPriceInvalid(false)
+                  }
+                }} />
                 <label className="text-sm">Price Per Use</label>
-                <input className="input" type="number" min={0} step="any" value={listPriceUse} onChange={e=> setListPriceUse(e.target.value)} />
+                <input className={`input ${listPriceUseInvalid ? 'border-red-500 focus:border-red-500' : ''}`} type="number" min={0} step={1} inputMode="numeric" value={listPriceUse} onChange={e=> {
+                  const v = e.target.value || ''
+                  if (v.includes('.')) {
+                    const iv = v.split('.')[0]
+                    setListPriceUse(iv)
+                    setListPriceUseInvalid(true)
+                  } else {
+                    setListPriceUse(v)
+                    setListPriceUseInvalid(false)
+                  }
+                }} />
                 <div className="flex gap-2 justify-end">
-                  <button className="btn-outline" onClick={()=> { setModal(null); setListPrice(''); setListPriceUse('') }}>Cancel</button>
+                  <button className="btn-outline" onClick={()=> { setModal(null); setListPrice(''); setListPriceUse(''); setListPriceInvalid(false); setListPriceUseInvalid(false) }}>Cancel</button>
                   <button className="btn-primary" onClick={async ()=>{
                     try {
                       const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
-                      const priceNum = Math.max(0, parseFloat(listPrice || '0'))
-                      const priceUseNum = Math.max(0, parseFloat(listPriceUse || '0'))
+                      const priceNum = Math.max(0, parseInt(listPrice || '0', 10))
+                      const priceUseNum = Math.max(0, parseInt(listPriceUse || '0', 10))
                       const r = await createMarketplaceListing(String(modal.id), accId, priceNum, priceUseNum)
                       if (r && !r.error) {
                         setPacks(prev => prev.map(x => x.id === modal.id ? { ...x, listed: true } : x))
                         setModal(null)
                         setListPrice('')
                         setListPriceUse('')
+                        setListPriceInvalid(false)
+                        setListPriceUseInvalid(false)
                         pushToast('success','Listed for rent')
                       } else {
                         pushToast('error', r?.error || 'Listing failed')
@@ -321,9 +345,29 @@ export default function Packs() {
               <div className="space-y-3">
                 <div className="font-semibold">Update Listing</div>
                 <label className="text-sm">Rent Price</label>
-                <input className="input" type="number" min={0} step="any" value={listPrice} onChange={e=> setListPrice(e.target.value)} />
+                <input className={`input ${listPriceInvalid ? 'border-red-500 focus:border-red-500' : ''}`} type="number" min={0} step={1} inputMode="numeric" value={listPrice} onChange={e=> {
+                  const v = e.target.value || ''
+                  if (v.includes('.')) {
+                    const iv = v.split('.')[0]
+                    setListPrice(iv)
+                    setListPriceInvalid(true)
+                  } else {
+                    setListPrice(v)
+                    setListPriceInvalid(false)
+                  }
+                }} />
                 <label className="text-sm">Price Per Use</label>
-                <input className="input" type="number" min={0} step="any" value={listPriceUse} onChange={e=> setListPriceUse(e.target.value)} />
+                <input className={`input ${listPriceUseInvalid ? 'border-red-500 focus:border-red-500' : ''}`} type="number" min={0} step={1} inputMode="numeric" value={listPriceUse} onChange={e=> {
+                  const v = e.target.value || ''
+                  if (v.includes('.')) {
+                    const iv = v.split('.')[0]
+                    setListPriceUse(iv)
+                    setListPriceUseInvalid(true)
+                  } else {
+                    setListPriceUse(v)
+                    setListPriceUseInvalid(false)
+                  }
+                }} />
                 <div className="flex items-center justify-between">
                   <div>
                     <button className="btn-danger" onClick={async ()=>{
@@ -341,17 +385,19 @@ export default function Packs() {
                     }}>Unrent</button>
                   </div>
                   <div className="flex gap-2">
-                    <button className="btn-outline" onClick={()=> { setModal(null); setListPrice(''); setListPriceUse('') }}>Cancel</button>
+                    <button className="btn-outline" onClick={()=> { setModal(null); setListPrice(''); setListPriceUse(''); setListPriceInvalid(false); setListPriceUseInvalid(false) }}>Cancel</button>
                     <button className="btn-primary" onClick={async ()=>{
                       try {
                         const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
-                        const priceNum = Math.max(0, parseFloat(listPrice || '0'))
-                        const priceUseNum = Math.max(0, parseFloat(listPriceUse || '0'))
+                        const priceNum = Math.max(0, parseInt(listPrice || '0', 10))
+                        const priceUseNum = Math.max(0, parseInt(listPriceUse || '0', 10))
                         const r = await updateMarketplaceListing(String(modal.id), accId, priceNum, priceUseNum)
                         if (r && !r.error) {
                           setModal(null)
                           setListPrice('')
                           setListPriceUse('')
+                          setListPriceInvalid(false)
+                          setListPriceUseInvalid(false)
                           pushToast('success','Listing updated')
                         } else {
                           pushToast('error', r?.error || 'Update failed')

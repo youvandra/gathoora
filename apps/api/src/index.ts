@@ -240,7 +240,7 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
       if (!listing) continue
       const owner = String(listing.owner_account_id)
       const isOwner = owner === String(accountId)
-      const perUse = Math.max(0, Number((listing as any).price_per_use || 0))
+      const perUse = Math.max(0, Math.floor(Number((listing as any).price_per_use || 0)))
       if (!isOwner && perUse > 0) charges[owner] = (charges[owner] || 0) + perUse
     }
     const totalCharge = Object.values(charges).reduce((a, b) => a + b, 0)
@@ -287,7 +287,11 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
             const j = await r.json()
             decimals = Number(j?.decimals || 0)
           } catch {}
-          const toTiny = (v: number) => Math.round(v * Math.pow(10, decimals))
+          if (decimals <= 0) decimals = 8
+          const toTiny = (v: number) => {
+            const x = Math.round(v * Math.pow(10, decimals))
+            return x <= 0 && v > 0 ? 1 : x
+          }
           const tx = new HederaTransferTransaction()
             .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -toTiny(totalCharge))
           for (const [acct, amt] of Object.entries(charges)) {
@@ -334,13 +338,25 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
               const client2 = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
               const tokenIdStr2 = String(process.env.COK_TOKEN_ID || '')
               const tokenId2 = HederaTokenId.fromString(tokenIdStr2)
-            const spenderIdStr = String(process.env.ADDRESS || '')
-            const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
-            const tx2 = new HederaTransferTransaction()
-              .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -totalCharge)
-            for (const [acct, amt] of Object.entries(charges)) {
-              tx2.addTokenTransfer(tokenId2, HederaAccountId.fromString(acct), amt)
-            }
+              const base2 = hedNet === 'mainnet' ? 'https://mainnet.mirrornode.hedera.com' : 'https://testnet.mirrornode.hedera.com'
+              let decimals2 = 0
+              try {
+                const r2 = await fetch(`${base2}/api/v1/tokens/${encodeURIComponent(tokenIdStr2)}`)
+                const j2 = await r2.json()
+                decimals2 = Number(j2?.decimals || 0)
+              } catch {}
+              if (decimals2 <= 0) decimals2 = 8
+              const toTiny2 = (v: number) => {
+                const x = Math.round(v * Math.pow(10, decimals2))
+                return x <= 0 && v > 0 ? 1 : x
+              }
+              const spenderIdStr = String(process.env.ADDRESS || '')
+              const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
+              const tx2 = new HederaTransferTransaction()
+                .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -toTiny2(totalCharge))
+              for (const [acct, amt] of Object.entries(charges)) {
+                tx2.addTokenTransfer(tokenId2, HederaAccountId.fromString(acct), toTiny2(amt))
+              }
             tx2.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(spenderIdStr)))
               tx2.freezeWith(client2)
               const hex2 = spenderKeyStr.startsWith('0x') ? spenderKeyStr.slice(2) : spenderKeyStr
@@ -372,7 +388,11 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
                 const j2 = await r2.json()
                 decimals2 = Number(j2?.decimals || 0)
               } catch {}
-              const toTiny2 = (v: number) => Math.round(v * Math.pow(10, decimals2))
+              if (decimals2 <= 0) decimals2 = 8
+              const toTiny2 = (v: number) => {
+                const x = Math.round(v * Math.pow(10, decimals2))
+                return x <= 0 && v > 0 ? 1 : x
+              }
               const spenderIdStr = String(process.env.ADDRESS || '')
               const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
               const tx2 = new HederaTransferTransaction()
@@ -439,7 +459,7 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
         if (!listing) continue
         const owner = String(listing.owner_account_id)
         const isOwner = owner === String(accountId)
-        const perUse = Math.max(0, Number((listing as any).price_per_use || 0))
+    const perUse = Math.max(0, Math.floor(Number((listing as any).price_per_use || 0)))
         if (!isOwner && perUse > 0) charges2[owner] = (charges2[owner] || 0) + perUse
       }
       const totalCharge2: number = Object.values(charges2).reduce((a, b) => a + b, 0)
@@ -478,7 +498,7 @@ app.post('/x402/prepare-transfer', async (req: Request, res: Response) => {
     if (!listing) continue
     const owner = String(listing.owner_account_id)
     const isOwner = owner === String(accountId)
-    const perUse = Math.max(0, Number((listing as any).price_per_use || 0))
+    const perUse = Math.max(0, Math.floor(Number((listing as any).price_per_use || 0)))
     if (!isOwner && perUse > 0) charges[owner] = (charges[owner] || 0) + perUse
   }
   const totalCharge = Object.values(charges).reduce((a, b) => a + b, 0)
@@ -493,7 +513,11 @@ app.post('/x402/prepare-transfer', async (req: Request, res: Response) => {
     const j3 = await r3.json()
     decimals = Number(j3?.decimals || 0)
   } catch {}
-  const toTiny = (v: number) => Math.round(v * Math.pow(10, decimals))
+  if (decimals <= 0) decimals = 8
+  const toTiny = (v: number) => {
+    const x = Math.round(v * Math.pow(10, decimals))
+    return x <= 0 && v > 0 ? 1 : x
+  }
   const tx = new HederaTransferTransaction()
     .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -toTiny(totalCharge))
   for (const [acct, amt] of Object.entries(charges)) {
@@ -551,7 +575,7 @@ app.post('/x402/check-allowance', async (req: Request, res: Response) => {
 
       const owner = String(listing.owner_account_id);
       const isOwner = owner === String(accountId);
-      const perUse = Math.max(0, Number((listing as any).price_per_use || 0));
+      const perUse = Math.max(0, Math.floor(Number((listing as any).price_per_use || 0)));
 
       if (!isOwner && perUse > 0) {
         charges[owner] = (charges[owner] || 0) + perUse;
@@ -582,7 +606,7 @@ app.post('/x402/check-allowance', async (req: Request, res: Response) => {
         ? HederaClient.forMainnet()
         : HederaClient.forTestnet();
 
-    client.setOperator(operatorId, operatorKey);  
+    client.setOperator(operatorId, operatorKey);  // <-- FIX here
 
     // ---------------------------------------------------------
     // 3) Query token info (requires operator)
@@ -590,8 +614,12 @@ app.post('/x402/check-allowance', async (req: Request, res: Response) => {
     const tokenId = HederaTokenId.fromString(tokenIdStr);
     const info = await new HederaTokenInfoQuery().setTokenId(tokenId).execute(client);
 
-    const decimals = Number(info?.decimals || 0);
-    const toTiny = (v: number) => Math.round(v * Math.pow(10, decimals));
+    let decimals = Number(info?.decimals || 0);
+    if (decimals <= 0) decimals = 8;
+    const toTiny = (v: number) => {
+      const x = Math.round(v * Math.pow(10, decimals));
+      return x <= 0 && v > 0 ? 1 : x;
+    };
     const requiredTiny = toTiny(totalCharge);
 
     // ---------------------------------------------------------
@@ -627,10 +655,9 @@ app.post('/x402/check-allowance', async (req: Request, res: Response) => {
         if (spender !== spenderIdStr) return;
 
         const amtRaw = row?.amount;
-        const amt =
-          typeof amtRaw === 'string' ? Number(amtRaw) : Number(amtRaw || 0);
-
-        allowanceTiny += Math.max(0, Math.floor(amt));
+        const amt = typeof amtRaw === 'string' ? Number(amtRaw) : Number(amtRaw || 0);
+        const tinyAmt = Math.max(0, Math.floor(amt * Math.pow(10, decimals)));
+        allowanceTiny += tinyAmt;
       });
     } catch (err) {
       console.error('Mirror Node allowance error:', err);
@@ -710,8 +737,6 @@ app.post('/x402/submit-transfer', async (req: Request, res: Response) => {
 })
  
 
- 
-
 app.get('/marketplace/listings', async (req: Request, res: Response) => {
   const list = await db.listMarketplaceListings()
   res.json(list)
@@ -719,7 +744,7 @@ app.get('/marketplace/listings', async (req: Request, res: Response) => {
 
 app.post('/marketplace/listings', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().nonnegative(), pricePerUse: z.number().nonnegative() })
+    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().int().nonnegative(), pricePerUse: z.number().int().nonnegative() })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const kp = await db.getKnowledgePack(parsed.data.knowledgePackId)
@@ -749,7 +774,7 @@ app.get('/marketplace/listings/by-pack/:packId', async (req: Request, res: Respo
 
 app.post('/marketplace/listings/update', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().nonnegative(), pricePerUse: z.number().nonnegative() })
+    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().int().nonnegative(), pricePerUse: z.number().int().nonnegative() })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const listing = await db.getMarketplaceListingByPackId(parsed.data.knowledgePackId)
