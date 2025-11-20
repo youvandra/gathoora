@@ -668,6 +668,25 @@ export const db = {
     }
     return undefined
   }
+  , createActivityRent: async (payload: { account_id: string; listing_id: string; minutes: number; total_amount: number; charges: Record<string, number>; transaction_ids: string[]; network?: string }): Promise<any | undefined> => {
+    if (supabase) {
+      const { data, error } = await supabase.from('activities').insert({
+        account_id: payload.account_id,
+        type: 'rent',
+        question: null,
+        answer: null,
+        owned_ids: [],
+        listing_ids: [payload.listing_id],
+        charges: payload.charges,
+        total_amount: payload.total_amount,
+        transaction_ids: payload.transaction_ids,
+        network: payload.network || null
+      }).select('*').maybeSingle()
+      if (error) return undefined
+      return data || undefined
+    }
+    return undefined
+  }
   , listActivitiesByAccountId: async (accountId: string): Promise<any[]> => {
     if (supabase) {
       const { data, error } = await supabase.from('activities').select('*').eq('account_id', accountId).order('created_at', { ascending: false })
