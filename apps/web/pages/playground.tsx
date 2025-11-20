@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listKnowledgePacks, listMarketplaceListings, getMarketplaceRentalStatus, chatPlayground, getMarketplaceListing, prepareX402Transfer, submitX402Transfer, checkX402Allowance } from '../lib/api'
+import { listKnowledgePacks, listMarketplaceListings, getMarketplaceRentalStatus, chatPlayground, getMarketplaceListing, prepareX402Transfer, submitX402Transfer, checkX402Allowance, listActivities } from '../lib/api'
 
 export default function Playground() {
   const [accountId, setAccountId] = useState('')
@@ -16,6 +16,14 @@ export default function Playground() {
   const [sending, setSending] = useState(false)
   const feedRef = useRef<HTMLDivElement|null>(null)
   const [paymentNeeded, setPaymentNeeded] = useState<{ amount?: number }|null>(null)
+  const [activityQuery, setActivityQuery] = useState('')
+  const [activities, setActivities] = useState<any[]>([])
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activitySelected, setActivitySelected] = useState<any|null>(null)
+  const [activityPage, setActivityPage] = useState(1)
+  const [activitySize, setActivitySize] = useState(10)
+  const [activityOwnedTitles, setActivityOwnedTitles] = useState<Record<string, string>>({})
+  const [activityRentedTitles, setActivityRentedTitles] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
@@ -26,6 +34,12 @@ export default function Playground() {
     if (!accountId) return
     setLoadingOwned(true)
     listKnowledgePacks(accountId).then(setOwned).catch(()=>{}).finally(()=> setLoadingOwned(false))
+    ;(async () => {
+      try {
+        const acts = await listActivities(accountId)
+        setActivities(Array.isArray(acts) ? acts : [])
+      } catch {}
+    })()
   }, [accountId])
 
   useEffect(() => {
@@ -137,6 +151,50 @@ export default function Playground() {
       return sum + Math.max(0, meta.pricePerUse || 0)
     }, 0)
   }, [selRented, listingMeta, accountId])
+
+  const filteredActivities = useMemo(() => {
+    const q = activityQuery.trim().toLowerCase()
+    return activities.filter(a => !q || String(a.question||'').toLowerCase().includes(q))
+  }, [activities, activityQuery])
+
+  const pagedActivities = useMemo(() => {
+    const start = (activityPage - 1) * activitySize
+    return filteredActivities.slice(start, start + activitySize)
+  }, [filteredActivities, activityPage, activitySize])
+
+  const activityTotalPages = Math.max(1, Math.ceil(filteredActivities.length / activitySize))
+
+  useEffect(() => {
+    const ownMap: Record<string, string> = {}
+    const rentMap: Record<string, string> = {}
+    const missing: string[] = []
+    if (activitySelected && Array.isArray(activitySelected.owned_ids)) {
+      activitySelected.owned_ids.forEach((id: string) => {
+        const k = owned.find(o => o.id === id)
+        ownMap[id] = String(k?.title || 'Untitled Knowledge')
+      })
+    }
+    setActivityOwnedTitles(ownMap)
+    if (activitySelected && Array.isArray(activitySelected.listing_ids)) {
+      activitySelected.listing_ids.forEach((lid: string) => {
+        const l = rented.find(r => r.id === lid)
+        if (l) rentMap[lid] = String(l.title || 'Untitled Knowledge')
+        else missing.push(lid)
+      })
+    }
+    setActivityRentedTitles(rentMap)
+    if (missing.length) {
+      ;(async () => {
+        for (const lid of missing) {
+          try {
+            const l = await getMarketplaceListing(lid)
+            rentMap[lid] = String(l?.title || 'Untitled Knowledge')
+          } catch {}
+        }
+        setActivityRentedTitles({ ...rentMap })
+      })()
+    }
+  }, [activitySelected, owned, rented])
 
   async function send() {
     if ((!selOwned.length && !selRented.length) || !input) return
@@ -352,6 +410,7 @@ export default function Playground() {
             {paymentNeeded && (
               <button className="btn-secondary btn-sm" onClick={payWithWallet}>Pay with Wallet</button>
             )}
+            <button className="btn-outline btn-sm" onClick={()=> setActivityOpen(true)}>Activity</button>
             <button className="btn-outline btn-sm" onClick={()=>{ setSelOwned([]); setSelRented([]); setSelTitles([]); setMessages([]) }}>Clear</button>
           </div>
         </div>
@@ -381,6 +440,108 @@ export default function Playground() {
           </button>
         </div>
       </div>
+      {activityOpen && (
+        <div className="modal-backdrop" onClick={()=> { setActivityOpen(false); setActivitySelected(null) }}>
+          <div className="modal-card max-w-3xl" onClick={e=> e.stopPropagation()}>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">Activity</div>
+                <div className="flex items-center gap-2">
+                  <input className="input" placeholder="Search question" value={activityQuery} onChange={e=>{ setActivityQuery(e.target.value); setActivityPage(1) }} />
+                  <button className="btn-outline btn-sm" onClick={async()=>{ try { const acts = await listActivities(accountId); setActivities(Array.isArray(acts)?acts:[]) } catch {} }}>Refresh</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  {filteredActivities.length === 0 ? (
+                    <div className="text-sm text-brand-brown/60">No activity found</div>
+                  ) : (
+                    <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                      {pagedActivities.map((a: any) => (
+                        <div key={a.id || `${a.created_at}-${Math.random()}`} className={`card p-3 text-left ${activitySelected && (activitySelected.id===a.id) ? 'border border-brand-yellow' : ''}`}>
+                          <button className="btn-ghost text-left w-full" onClick={()=> setActivitySelected(a)}>
+                            <div className="text-sm truncate" title={String(a.question || '')}>{String(a.question || '')}</div>
+                          </button>
+                          <div className="flex items-center justify-between mt-2">
+                            <div className="text-xs text-brand-brown/60">{new Date(a.created_at || Date.now()).toLocaleString()}</div>
+                            <div className="text-sm">{Number(a.total_amount || 0)} COK</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="label">Rows</span>
+                      <select className="select w-24" value={activitySize} onChange={e=>{ setActivitySize(Number(e.target.value)); setActivityPage(1) }}>
+                        {[5,10,20,50].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {Array.from({ length: activityTotalPages }).map((_, idx) => (
+                        <button key={idx} className={activityPage === (idx+1) ? 'btn-page-active' : 'btn-page'} onClick={()=> setActivityPage(idx+1)}>{idx+1}</button>
+                      ))}
+                      <button className="btn-page" disabled={activityPage<=1} onClick={()=> setActivityPage(p=>Math.max(1,p-1))}>Prev</button>
+                      <button className="btn-page" disabled={activityPage>=activityTotalPages} onClick={()=> setActivityPage(p=>Math.min(activityTotalPages,p+1))}>Next</button>
+                    </div>
+                  </div>
+                </div>
+                <div className="card p-4">
+                  {!activitySelected ? (
+                    <div className="text-sm text-brand-brown/60">Select an activity to see details</div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="font-semibold">Details</div>
+                      <div className="text-sm text-brand-brown/60">{new Date(activitySelected.created_at || Date.now()).toLocaleString()}</div>
+                      <div>
+                        <div className="label">Question</div>
+                        <div className="text-sm break-words">{String(activitySelected.question || '')}</div>
+                      </div>
+                      <div>
+                        <div className="label">Answer</div>
+                        <div className="text-sm break-words whitespace-pre-wrap">{String(activitySelected.answer || '')}</div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <div className="label">Knowledge (owned)</div>
+                          <div className="text-xs">{(Array.isArray(activitySelected.owned_ids) ? activitySelected.owned_ids.map((id: string) => activityOwnedTitles[id] || id).join(', ') : '') || '-'}</div>
+                        </div>
+                        <div>
+                          <div className="label">Knowledge (rented)</div>
+                          <div className="text-xs">{(Array.isArray(activitySelected.listing_ids) ? activitySelected.listing_ids.map((id: string) => activityRentedTitles[id] || id).join(', ') : '') || '-'}</div>
+                        </div>
+                        <div>
+                          <div className="label">Amount</div>
+                          <div className="text-sm">{Number(activitySelected.total_amount || 0)} COK</div>
+                        </div>
+                      </div>
+                      {activitySelected && activitySelected.charges && Object.keys(activitySelected.charges).length > 0 && (
+                        <div className="space-y-1">
+                          <div className="label">Payments</div>
+                          <div className="text-xs font-mono">{Object.entries(activitySelected.charges).map(([to, amt]) => `${to}:${amt}`).join(', ')}</div>
+                        </div>
+                      )}
+                      {Array.isArray(activitySelected.transaction_ids) && activitySelected.transaction_ids.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="label">Transactions</div>
+                          <div className="flex flex-wrap gap-2">
+                            {activitySelected.transaction_ids.map((t: string) => (
+                              <a key={t} className="link" href={`https://hashscan.io/${(process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet')}/transaction/${encodeURIComponent(t)}`} target="_blank" rel="noreferrer">Hashscan</a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button className="btn-outline" onClick={()=> { setActivityOpen(false); setActivitySelected(null) }}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

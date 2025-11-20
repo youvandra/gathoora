@@ -15,7 +15,7 @@ export default function Profile() {
   const [cokLoading, setCokLoading] = useState<boolean>(false)
   const [minting, setMinting] = useState<boolean>(false)
   const [needAssociate, setNeedAssociate] = useState<boolean>(false)
-  const [activities, setActivities] = useState<any[]>([])
+  
 
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
@@ -26,10 +26,7 @@ export default function Profile() {
         const { data } = await supabase.from('users').select('name').eq('account_id', acc).maybeSingle()
         setName(String(data?.name || ''))
       } catch {}
-      try {
-        const acts = await listActivities(acc)
-        setActivities(Array.isArray(acts) ? acts : [])
-      } catch {}
+      
       try {
         const agents = await listAgents()
         const mine = (Array.isArray(agents) ? agents : []).filter((a: any) => String(a.ownerAccountId||'') === acc)
@@ -281,67 +278,6 @@ export default function Profile() {
           <div className="label">ELO Rating</div>
           <div className="text-2xl font-bold">{elo}</div>
         </div>
-      </div>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold">Activity</h3>
-          <button className="btn-outline btn-sm" onClick={async()=>{ try { const acts = await listActivities(accountId); setActivities(Array.isArray(acts)?acts:[]) } catch {} }}>Refresh</button>
-        </div>
-        {activities.length === 0 ? (
-          <div className="text-sm text-brand-brown/60">No activity yet</div>
-        ) : (
-          <div className="space-y-3">
-            {activities.map((a: any) => {
-              const network = process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet'
-              const txs: string[] = Array.isArray(a.transaction_ids) ? a.transaction_ids : []
-              const charges = a.charges || {}
-              const ownedIds: string[] = Array.isArray(a.owned_ids) ? a.owned_ids : []
-              const listingIds: string[] = Array.isArray(a.listing_ids) ? a.listing_ids : []
-              const total = Number(a.total_amount || 0)
-              return (
-                <div key={a.id || `${a.created_at}-${Math.random()}`} className="card p-4 space-y-2">
-                  <div className="text-sm text-brand-brown/60">{new Date(a.created_at || Date.now()).toLocaleString()}</div>
-                  <div className="label">Question</div>
-                  <div className="text-sm">{String(a.question || '')}</div>
-                  <div className="label">Answer</div>
-                  <div className="text-sm break-words">{String(a.answer || '').slice(0, 500)}</div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <div>
-                      <div className="label">Knowledge (owned)</div>
-                      <div className="text-xs font-mono">{ownedIds.join(', ') || '-'}</div>
-                    </div>
-                    <div>
-                      <div className="label">Knowledge (rented)</div>
-                      <div className="text-xs font-mono">{listingIds.join(', ') || '-'}</div>
-                    </div>
-                    <div>
-                      <div className="label">Amount</div>
-                      <div className="text-sm">{total} COK</div>
-                    </div>
-                  </div>
-                  {Object.keys(charges).length > 0 && (
-                    <div className="space-y-1">
-                      <div className="label">Payments</div>
-                      <div className="text-xs font-mono">{Object.entries(charges).map(([to, amt]) => `${to}:${amt}`).join(', ')}</div>
-                    </div>
-                  )}
-                  {txs.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="label">Transactions</div>
-                      <div className="flex flex-wrap gap-2">
-                        {txs.map((t) => (
-                          <div key={t} className="inline-flex items-center gap-2">
-                            <a className="link" href={`https://hashscan.io/${network}/transaction/${encodeURIComponent(t)}`} target="_blank" rel="noreferrer">Hashscan</a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
     </div>
   )
