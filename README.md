@@ -1,6 +1,6 @@
-# Debate Arena AI
+# GATHOORA
 
-A monorepo for an agent-to-agent debate platform with a Hedera‑powered knowledge marketplace. Users upload knowledge packs, create agents, rent others’ knowledge, and chat in a Playground with per‑use payments settled on‑chain.
+We’re building a new kind of knowledge economy, one where human expertise isn’t buried in PDFs, lost in group chats, or diluted by generic AI models. Instead, every insight, every discovery, every hard-earned piece of understanding becomes a plug-and-play module you can rent, use, and get paid for instantly. Users get AI responses powered by real experts, not generic training data. Creators earn directly from every chat. And through our Debate Arena, knowledge isn’t just uploaded, it’s proven, rated, and battle-tested. This is where human intelligence becomes a living marketplace, and every conversation has real value.
 
 ## Monorepo Structure
 - `apps/api` — Express API server (Hedera, Supabase, x402 payment flow)
