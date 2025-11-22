@@ -109,6 +109,11 @@ See `.env.example` for full list.
   - `GET /activities?accountId` — list chat activities for user
   - `GET /rent-activities?accountId` — list rent activity history for user
 
+#### Hedera Deployed
+COK TOKEN = 0.0.7284519
+HCS_ELO_TOPIC_ID = 0.0.7291514
+HCS_KNOWLEDGE_TOPIC_ID = 0.0.7292283
+
 #### Hedera Payment Flow
 - Direct Transfer (if user’s private key is available):
   - Associate token, then execute a `TransferTransaction` from renter → owner
